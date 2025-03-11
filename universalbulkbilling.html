@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.6.42">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="David Fong">
+<meta name="dcterms.date" content="2025-03-11">
+
+<title>UniversalBulkBilling</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="universalbulkbilling_files/libs/clipboard/clipboard.min.js"></script>
+<script src="universalbulkbilling_files/libs/quarto-html/quarto.js"></script>
+<script src="universalbulkbilling_files/libs/quarto-html/popper.min.js"></script>
+<script src="universalbulkbilling_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="universalbulkbilling_files/libs/quarto-html/anchor.min.js"></script>
+<link href="universalbulkbilling_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="universalbulkbilling_files/libs/quarto-html/quarto-syntax-highlighting-2f5df379a58b258e96c21c0638c20c03.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="universalbulkbilling_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="universalbulkbilling_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="universalbulkbilling_files/libs/bootstrap/bootstrap-a943fd88264382075bece5689f2f9969.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">UniversalBulkBilling</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>David Fong </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">March 11, 2025</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<section id="shiny-documents" class="level2">
+<h2 class="anchored" data-anchor-id="shiny-documents">Shiny Documents</h2>
+<p>This Quarto document is made interactive using Shiny. Interactive documents allow readers to modify parameters and see the results immediately. Learn more about Shiny interactive documents at <a href="https://quarto.org/docs/interactive/shiny/" class="uri">https://quarto.org/docs/interactive/shiny/</a>.</p>
+</section>
+<section id="setup" class="level2">
+<h2 class="anchored" data-anchor-id="setup">Setup</h2>
+</section>
+<section id="data" class="level2">
+<h2 class="anchored" data-anchor-id="data">Data</h2>
+</section>
+<section id="inputs-and-outputs" class="level2">
+<h2 class="anchored" data-anchor-id="inputs-and-outputs">Inputs and Outputs</h2>
+<p>You can embed Shiny inputs and outputs in your document. Outputs are automatically updated whenever inputs change. This demonstrates how a standard R plot can be made interactive:</p>
+<div class="cell">
+<div class="cell-output-display">
+<div id="mean_fee" class="shiny-text-output"></div>
+</div>
+<div class="cell-output-display">
+<div id="myoutput" class="shiny-text-output"></div>
+</div>
+<div class="cell-output-display no-overflow-x">
+<div class="form-group shiny-input-container">
+<label class="control-label" id="monash-label" for="monash">Select Monash area</label>
+<div>
+<select id="monash" class="shiny-input-select"><option value="1" selected="">1</option>
+<option value="2">2</option>
+<option value="3+4">3+4</option>
+<option value="5">5</option>
+<option value="6">6</option>
+<option value="7">7</option></select>
+<script type="application/json" data-for="monash" data-nonempty="">{"plugins":["selectize-plugin-a11y"]}</script>
+</div>
+</div>
+</div>
+<div class="cell-output-display">
+<div class="rhandsontable html-widget html-widget-output shiny-report-size html-fill-item" id="mbs_table" style="width:100%;height:100%;"></div>
+</div>
+</div>
+<p>
+<script type="application/shiny-prerendered" data-context="server-start">
+# load libraries
+library(tibble)
+library(plotly)
+library(ggplot2)
+library(dplyr)
+library(rhandsontable)
+library(htmlwidgets)
+</script>
+ 
+<script type="application/shiny-prerendered" data-context="data">
+# read Medicare Benefit Schedule
+#  includes Medicare items, fees, applicable bulk-bill incentives
+#  and also default 'raw' numbers of how often the service fee is used
+#  
+# CSV document
+#   required fields
+#   -- fee_names : character string
+#   -- service_fees : the Medicare Benefit for the service
+#   -- service_proportion_raw : the relative numbers for how often the service fee is used
+#     the numbers in the default .csv file come from Medicare Benefits Schedule
+#     statistics (2024)
+#   -- individual_bulkbill_incentive_by_fee : character string, 'single' or 'triple'
+service_items <- read.csv("medicarebenefits.csv") |>
+  # calculate the proportions
+  # for simplicity, assume the same proportions for bulk-billed patients
+  # and privately-billed patients
+  mutate(
+    service_proportion_raw_bulk = service_proportion_raw,
+    service_proportion_raw_private = service_proportion_raw
+  ) |>
+  mutate(
+    service_proportion_bulk = service_proportion_raw_bulk/sum(service_proportion_raw_bulk),
+    service_proportion_private = service_proportion_raw_private/sum(service_proportion_raw_private)
+  ) |>
+  select(
+    fee_names, service_fees, individual_bulkbill_incentive_by_fee,
+    gap_fee,
+    service_proportion_bulk, service_proportion_private, 
+    service_proportion_raw_bulk, service_proportion_raw_private
+  )
+
+# the individual service bulk-bill incentive (dollars)
+# varies by location
+#   Modified Monash areas 1, 2, 3+4, 5, 6, 7
+#   we will index the above to 1, 2, 3, 4, 5 and 6 (merging areas 3+4)
+
+# see https://www9.health.gov.au/mbs/search.cfm
+n_monash <- 6 # six different Monash areas
+individual_bulkbill_incentive <- array(
+  # there are two different individual bulk-billing incentive fees,
+  # 'standard' and 'triple'
+  data = c(
+    # standard bulk-billing incentive applies to service items like item A/'3'
+    # items 10990, 10991, 75855, 75856, 75857, 75858
+    c(7.15, 10.80, 11.45, 12.20, 12.85, 13.70),
+    # triple bulk-billing incentive applies to service items like item B, C and D
+    # items 75870, 75871, 75873, 75874, 75875, 75876
+    c(21.35, 32.50, 34.50, 36.65, 38.70, 41.10)
+  ),
+  dim = c(n_monash, 2),
+  dimnames = list(c("1", "2", "3+4", "5", "6", "7"), c("single", "triple"))
+)
+
+# universal bulk billing incentive
+# over the service fee
+# set to 12.5%
+universal_bulkbill_incentive <- 0.125
+
+fee_mean <- function(
+  # calculate the current mean fee
+  service_fees,
+  fee_names,
+  service_proportion_bulk,
+  service_proportion_private,
+  gap_fee,
+  privately_billed,
+  individual_bulkbill_incentive,
+  individual_bulkbill_incentive_by_fee,
+  monash_area
+) {
+  # calculate individual bulk-bill incentive applicable to defined Monash area
+  fee_bulkbill_incentive <- 
+    individual_bulkbill_incentive[monash_area, individual_bulkbill_incentive_by_fee]
+  # re-define dimensions of the 'x' array
+  dim(fee_bulkbill_incentive) <- c(length(fee_names), 1)
+  # change row name to the fee names
+  rownames(fee_bulkbill_incentive) <- fee_names
+  
+  privately_billed *
+    sum(service_fees * service_proportion_private) +
+    (1 - privately_billed) *
+    sum(service_fees * service_proportion_bulk) +
+    # the calculation above could be simplified, of course!, to
+    # sum(service_fees * service_proportion_private), but is kept
+    # separate to two different portions to clarify the calculation
+    
+    # calculate (and add) the individual service bulk-billing incentive applied
+    # to patients currently bulk-billed
+    (1 - privately_billed) * 
+    sum(service_proportion_private * fee_bulkbill_incentive) +
+    
+    # calculate (and add) the private 'gap' fee
+    privately_billed * sum(service_proportion_private * gap_fee)
+}
+
+net_benefit <- function(
+  # calculate the average net benefit revenue
+  # to the practice per patient
+  
+  # the variable names used in this function
+  # are the same as used in previous code chunks
+  # but will be 'local' to this function
+  service_fees,
+  fee_names,
+  service_proportion_bulk,
+  service_proportion_private,
+  gap_fee,
+  privately_billed,
+  individual_bulkbill_incentive,
+  individual_bulkbill_incentive_by_fee,
+  monash_area,
+  universal_bulkbill_incentive) {
+  # calculate individual bulk-bill incentive applicable to defined Monash area
+  fee_bulkbill_incentive <- individual_bulkbill_incentive[monash_area, individual_bulkbill_incentive_by_fee]
+  # re-define dimensions of the 'x' array
+  dim(fee_bulkbill_incentive) <- c(length(fee_names), 1)
+  # change row name to the fee names
+  rownames(fee_bulkbill_incentive) <- fee_names
+  
+  # calculate the universal bulk-bill incentive
+  # for patients formerly privately-billed
+  privately_billed *
+    sum(service_fees * service_proportion_private) *
+    universal_bulkbill_incentive +
+    # calculate (and add) benefit for patients already bulk-billed
+    (1 - privately_billed) *
+    sum(service_fees * service_proportion_bulk) *
+    universal_bulkbill_incentive +
+    
+    # calculate (and add) the individual service bulk-billing incentive applied
+    # to patients formerly privately-billed
+    privately_billed * sum(service_proportion_private * fee_bulkbill_incentive) -
+    
+    # calculate (and subtract) the loss from not charging a private 'gap' fee
+    privately_billed * sum(service_proportion_private * gap_fee)
+}
+
+</script>
+ 
+<script type="application/shiny-prerendered" data-context="server">
+values = reactiveValues(
+  service_table = service_items
+)
+
+mean_fee = reactive({
+  
+  fee_mean(
+    values[["service_table"]]$service_fees,
+    values[["service_table"]]$fee_names,
+    values[["service_table"]]$service_proportion_bulk,
+    values[["service_table"]]$service_proportion_private,
+    values[["service_table"]]$gap_fee,
+    values[["service_table"]]$privately_billed,
+    values[["service_table"]]$individual_bulkbill_incentive,
+    values[["service_table"]]$individual_bulkbill_incentive_by_fee,
+    input$monash
+  )
+})
+
+output$myoutput <- renderText({values[["service_table"]]$fee_names})
+
+output$mean_fee <- renderText({paste("Mean fee: $", mean_fee())})
+
+output$mbs_table = renderRHandsontable({
+  DT = NULL
+  if (!is.null(input$mbs_table)) {
+    DT = hot_to_r(input$mbs_table)
+  } else if (!is.null(values[["service_table"]])) {
+    DT = values[["service_table"]]
+  }
+  
+  browser()
+  if (!is.null(DT))
+    rhandsontable(
+      DT
+    ) |>
+    hot_context_menu(
+      # cannot change columns
+      # (but rows can be added/removed)
+      allowColEdit = FALSE
+    ) |>
+    hot_col(
+      col = "individual_bulkbill_incentive_by_fee",
+      # only allow two choices
+      type = "dropdown", source = c("single", "triple")
+    ) |>
+    hot_col(
+      col = c("service_proportion_bulk", "service_proportion_private"),
+      format = "0.00%"
+    ) |>
+    hot_col(
+      c("service_proportion_bulk", "service_proportion_private"),
+      readOnly = TRUE
+    ) |>
+    hot_col(
+      col = c(
+        "service_fees",
+        "service_proportion_raw_bulk", "service_proportion_raw_private"
+      ),
+      # cannot be negative numbers
+      min = 0
+    )
+})
+
+</script>
+ 
+<script type="application/shiny-prerendered" data-context="server-extras">
+ojs_define <- function(..., .session = shiny::getDefaultReactiveDomain()) {
+  quos <- rlang::enquos(...)
+  vars <- rlang::list2(...)
+  nm <- names(vars)
+  if (is.null(nm)) {
+    nm <- rep_len("", length(vars))
+  }
+  mapply(function(q, nm, val) {
+    # Infer name, if possible
+    if (nm == "") {
+      tryCatch({
+        nm <- rlang::as_name(q)
+      }, error = function(e) {
+        code <- paste(collapse = "\n", deparse(rlang::f_rhs(q)))
+        stop("ojs_define() could not create a name for the argument: ", code)
+      })
+    }
+    .session$output[[nm]] <- val
+    outputOptions(.session$output, nm, suspendWhenHidden = FALSE)
+    .session$sendCustomMessage("ojs-export", list(name = nm))
+    NULL
+  }, quos, nm, vars, SIMPLIFY = FALSE, USE.NAMES = FALSE)
+  invisible()
+}
+</script>
+</p>
+<!--html_preserve-->
+<script type="application/shiny-prerendered" data-context="dependencies">
+{"type":"list","attributes":{},"value":[{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["selectize"]},{"type":"character","attributes":{},"value":["0.15.2"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["www/shared/selectize"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["js/selectize.min.js","accessibility/js/selectize-plugin-a11y.min.js"]},{"type":"character","attributes":{},"value":["css/selectize.bootstrap3.css"]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["shiny"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["1.9.1"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["htmltools-fill"]},{"type":"character","attributes":{},"value":["0.5.8.1"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["fill"]}]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["fill.css"]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["htmltools"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["0.5.8.1"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["htmlwidgets"]},{"type":"character","attributes":{},"value":["1.6.4"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["www"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["htmlwidgets.js"]},{"type":"NULL"},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["htmlwidgets"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["1.6.4"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["handsontable"]},{"type":"character","attributes":{},"value":["6.2.2"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["htmlwidgets/lib/handsontable"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["handsontable.full.min.js","all.min.js"]},{"type":"character","attributes":{},"value":["handsontable.full.min.css"]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["rhandsontable"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["0.3.8"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["numbro.languages"]},{"type":"character","attributes":{},"value":["2.0.6"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["htmlwidgets/lib/numbro"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["languages.min.js"]},{"type":"NULL"},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["rhandsontable"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["0.3.8"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["chroma"]},{"type":"character","attributes":{},"value":["1.3.3"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["htmlwidgets/lib/chroma"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["chroma.min.js"]},{"type":"NULL"},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["rhandsontable"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["0.3.8"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["jquery"]},{"type":"character","attributes":{},"value":["3.2.1"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["htmlwidgets/lib/jquery"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["jquery.min.js"]},{"type":"NULL"},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["rhandsontable"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["0.3.8"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["sparkline"]},{"type":"character","attributes":{},"value":["2.1.2"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["htmlwidgets/lib/sparkline"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["jquery.sparkline.min.js"]},{"type":"NULL"},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["rhandsontable"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["0.3.8"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["rhandsontable"]},{"type":"character","attributes":{},"value":["0.3.7"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["htmlwidgets"]}]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["rhandsontable.css"]},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["rhandsontable"]},{"type":"logical","attributes":{},"value":[true]},{"type":"character","attributes":{},"value":["0.3.8"]}]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["name","version","src","meta","script","stylesheet","head","attachment","package","all_files","pkgVersion"]},"class":{"type":"character","attributes":{},"value":["html_dependency"]}},"value":[{"type":"character","attributes":{},"value":["rhandsontable-binding"]},{"type":"character","attributes":{},"value":["0.3.8"]},{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["file"]}},"value":[{"type":"character","attributes":{},"value":["htmlwidgets"]}]},{"type":"NULL"},{"type":"character","attributes":{},"value":["rhandsontable.js"]},{"type":"NULL"},{"type":"NULL"},{"type":"NULL"},{"type":"character","attributes":{},"value":["rhandsontable"]},{"type":"logical","attributes":{},"value":[false]},{"type":"character","attributes":{},"value":["0.3.8"]}]}]}
+</script>
+<!--/html_preserve-->
+<!--html_preserve-->
+<script type="application/shiny-prerendered" data-context="execution_dependencies">
+{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["packages"]}},"value":[{"type":"list","attributes":{"names":{"type":"character","attributes":{},"value":["packages","version"]},"class":{"type":"character","attributes":{},"value":["data.frame"]},"row.names":{"type":"integer","attributes":{},"value":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61]}},"value":[{"type":"character","attributes":{},"value":["base","bslib","cachem","cli","codetools","colorspace","compiler","data.table","datasets","digest","dplyr","evaluate","fastmap","generics","ggplot2","glue","graphics","grDevices","grid","gtable","htmltools","htmlwidgets","httpuv","httr","jquerylib","jsonlite","knitr","later","lazyeval","lifecycle","magrittr","memoise","methods","mime","munsell","pillar","pkgconfig","plotly","promises","purrr","R6","Rcpp","rhandsontable","rlang","rmarkdown","rstudioapi","sass","scales","shiny","stats","tibble","tidyr","tidyselect","tools","utils","vctrs","viridisLite","withr","xfun","xtable","yaml"]},{"type":"character","attributes":{},"value":["4.3.1","0.8.0","1.1.0","3.6.4","0.2-19","2.1-1","4.3.1","1.16.2","4.3.1","0.6.37","1.1.4","1.0.3","1.2.0","0.1.3","3.5.1","1.8.0","4.3.1","4.3.1","4.3.1","0.3.6","0.5.8.1","1.6.4","1.6.15","1.4.7","0.1.4","1.8.9","1.49","1.3.2","0.2.2","1.0.4","2.0.3","2.0.1","4.3.1","0.12","0.5.1","1.10.1","2.0.3","4.10.4","1.3.0","1.0.2","2.6.1","1.0.13","0.3.8","1.1.5","2.28","0.17.1","0.4.9","1.3.0","1.9.1","4.3.1","3.2.1","1.3.1","1.2.1","4.3.1","4.3.1","0.6.5","0.4.2","3.0.2","0.50","1.8-4","2.3.10"]}]}]}
+</script>
+<!--/html_preserve-->
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const isCodeAnnotation = (el) => {
+    for (const clz of el.classList) {
+      if (clz.startsWith('code-annotation-')) {                     
+        return true;
+      }
+    }
+    return false;
+  }
+  const onCopySuccess = function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    let tooltip;
+    if (window.bootstrap) {
+      button.setAttribute("data-bs-toggle", "tooltip");
+      button.setAttribute("data-bs-placement", "left");
+      button.setAttribute("data-bs-title", "Copied!");
+      tooltip = new bootstrap.Tooltip(button, 
+        { trigger: "manual", 
+          customClass: "code-copy-button-tooltip",
+          offset: [0, -8]});
+      tooltip.show();    
+    }
+    setTimeout(function() {
+      if (tooltip) {
+        tooltip.hide();
+        button.removeAttribute("data-bs-title");
+        button.removeAttribute("data-bs-toggle");
+        button.removeAttribute("data-bs-placement");
+      }
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  }
+  const getTextToCopy = function(trigger) {
+      const codeEl = trigger.previousElementSibling.cloneNode(true);
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+  }
+  const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+    text: getTextToCopy
+  });
+  clipboard.on('success', onCopySuccess);
+  if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+    const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+      text: getTextToCopy,
+      container: window.document.getElementById('quarto-embedded-source-code-modal')
+    });
+    clipboardModal.on('success', onCopySuccess);
+  }
+    var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+    var mailtoRegex = new RegExp(/^mailto:/);
+      var filterRegex = new RegExp('/' + window.location.host + '/');
+    var isInternal = (href) => {
+        return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+    }
+    // Inspect non-navigation links and adorn them if external
+ 	var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+    for (var i=0; i<links.length; i++) {
+      const link = links[i];
+      if (!isInternal(link.href)) {
+        // undo the damage that might have been done by quarto-nav.js in the case of
+        // links that we want to consider external
+        if (link.dataset.originalHref !== undefined) {
+          link.href = link.dataset.originalHref;
+        }
+      }
+    }
+  function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+    const config = {
+      allowHTML: true,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start',
+    };
+    if (contentFn) {
+      config.content = contentFn;
+    }
+    if (onTriggerFn) {
+      config.onTrigger = onTriggerFn;
+    }
+    if (onUntriggerFn) {
+      config.onUntrigger = onUntriggerFn;
+    }
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      if (note) {
+        return note.innerHTML;
+      } else {
+        return "";
+      }
+    });
+  }
+  const xrefs = window.document.querySelectorAll('a.quarto-xref');
+  const processXRef = (id, note) => {
+    // Strip column container classes
+    const stripColumnClz = (el) => {
+      el.classList.remove("page-full", "page-columns");
+      if (el.children) {
+        for (const child of el.children) {
+          stripColumnClz(child);
+        }
+      }
+    }
+    stripColumnClz(note)
+    if (id === null || id.startsWith('sec-')) {
+      // Special case sections, only their first couple elements
+      const container = document.createElement("div");
+      if (note.children && note.children.length > 2) {
+        container.appendChild(note.children[0].cloneNode(true));
+        for (let i = 1; i < note.children.length; i++) {
+          const child = note.children[i];
+          if (child.tagName === "P" && child.innerText === "") {
+            continue;
+          } else {
+            container.appendChild(child.cloneNode(true));
+            break;
+          }
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(container);
+        }
+        return container.innerHTML
+      } else {
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        return note.innerHTML;
+      }
+    } else {
+      // Remove any anchor links if they are present
+      const anchorLink = note.querySelector('a.anchorjs-link');
+      if (anchorLink) {
+        anchorLink.remove();
+      }
+      if (window.Quarto?.typesetMath) {
+        window.Quarto.typesetMath(note);
+      }
+      if (note.classList.contains("callout")) {
+        return note.outerHTML;
+      } else {
+        return note.innerHTML;
+      }
+    }
+  }
+  for (var i=0; i<xrefs.length; i++) {
+    const xref = xrefs[i];
+    tippyHover(xref, undefined, function(instance) {
+      instance.disable();
+      let url = xref.getAttribute('href');
+      let hash = undefined; 
+      if (url.startsWith('#')) {
+        hash = url;
+      } else {
+        try { hash = new URL(url).hash; } catch {}
+      }
+      if (hash) {
+        const id = hash.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note !== null) {
+          try {
+            const html = processXRef(id, note.cloneNode(true));
+            instance.setContent(html);
+          } finally {
+            instance.enable();
+            instance.show();
+          }
+        } else {
+          // See if we can fetch this
+          fetch(url.split('#')[0])
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.getElementById(id);
+            if (note !== null) {
+              const html = processXRef(id, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      } else {
+        // See if we can fetch a full url (with no hash to target)
+        // This is a special case and we should probably do some content thinning / targeting
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+          const parser = new DOMParser();
+          const htmlDoc = parser.parseFromString(html, "text/html");
+          const note = htmlDoc.querySelector('main.content');
+          if (note !== null) {
+            // This should only happen for chapter cross references
+            // (since there is no id in the URL)
+            // remove the first header
+            if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+              note.children[0].remove();
+            }
+            const html = processXRef(null, note);
+            instance.setContent(html);
+          } 
+        }).finally(() => {
+          instance.enable();
+          instance.show();
+        });
+      }
+    }, function(instance) {
+    });
+  }
+      let selectedAnnoteEl;
+      const selectorForAnnotation = ( cell, annotation) => {
+        let cellAttr = 'data-code-cell="' + cell + '"';
+        let lineAttr = 'data-code-annotation="' +  annotation + '"';
+        const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+        return selector;
+      }
+      const selectCodeLines = (annoteEl) => {
+        const doc = window.document;
+        const targetCell = annoteEl.getAttribute("data-target-cell");
+        const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+        const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+        const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+        const lineIds = lines.map((line) => {
+          return targetCell + "-" + line;
+        })
+        let top = null;
+        let height = null;
+        let parent = null;
+        if (lineIds.length > 0) {
+            //compute the position of the single el (top and bottom and make a div)
+            const el = window.document.getElementById(lineIds[0]);
+            top = el.offsetTop;
+            height = el.offsetHeight;
+            parent = el.parentElement.parentElement;
+          if (lineIds.length > 1) {
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+            height = bottom - top;
+          }
+          if (top !== null && height !== null && parent !== null) {
+            // cook up a div (if necessary) and position it 
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            div.style.top = top - 2 + "px";
+            div.style.height = height + 4 + "px";
+            div.style.left = 0;
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            gutterDiv.style.top = top - 2 + "px";
+            gutterDiv.style.height = height + 4 + "px";
+          }
+          selectedAnnoteEl = annoteEl;
+        }
+      };
+      const unselectCodeLines = () => {
+        const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+        elementsIds.forEach((elId) => {
+          const div = window.document.getElementById(elId);
+          if (div) {
+            div.remove();
+          }
+        });
+        selectedAnnoteEl = undefined;
+      };
+        // Handle positioning of the toggle
+    window.addEventListener(
+      "resize",
+      throttle(() => {
+        elRect = undefined;
+        if (selectedAnnoteEl) {
+          selectCodeLines(selectedAnnoteEl);
+        }
+      }, 10)
+    );
+    function throttle(fn, ms) {
+    let throttle = false;
+    let timer;
+      return (...args) => {
+        if(!throttle) { // first call gets through
+            fn.apply(this, args);
+            throttle = true;
+        } else { // all the others get throttled
+            if(timer) clearTimeout(timer); // cancel #2
+            timer = setTimeout(() => {
+              fn.apply(this, args);
+              timer = throttle = false;
+            }, ms);
+        }
+      };
+    }
+      // Attach click handler to the DT
+      const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+      for (const annoteDlNode of annoteDls) {
+        annoteDlNode.addEventListener('click', (event) => {
+          const clickedEl = event.target;
+          if (clickedEl !== selectedAnnoteEl) {
+            unselectCodeLines();
+            const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+            if (activeEl) {
+              activeEl.classList.remove('code-annotation-active');
+            }
+            selectCodeLines(clickedEl);
+            clickedEl.classList.add('code-annotation-active');
+          } else {
+            // Unselect the line
+            unselectCodeLines();
+            clickedEl.classList.remove('code-annotation-active');
+          }
+        });
+      }
+  const findCites = (el) => {
+    const parentEl = el.parentElement;
+    if (parentEl) {
+      const cites = parentEl.dataset.cites;
+      if (cites) {
+        return {
+          el,
+          cites: cites.split(' ')
+        };
+      } else {
+        return findCites(el.parentElement)
+      }
+    } else {
+      return undefined;
+    }
+  };
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const citeInfo = findCites(ref);
+    if (citeInfo) {
+      tippyHover(citeInfo.el, function() {
+        var popup = window.document.createElement('div');
+        citeInfo.cites.forEach(function(cite) {
+          var citeDiv = window.document.createElement('div');
+          citeDiv.classList.add('hanging-indent');
+          citeDiv.classList.add('csl-entry');
+          var biblioDiv = window.document.getElementById('ref-' + cite);
+          if (biblioDiv) {
+            citeDiv.innerHTML = biblioDiv.innerHTML;
+          }
+          popup.appendChild(citeDiv);
+        });
+        return popup.innerHTML;
+      });
+    }
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
