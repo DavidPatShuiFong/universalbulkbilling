@@ -11,6 +11,7 @@ library(shiny)
 library(tibble)
 library(plotly)
 library(ggplot2)
+library(ggthemes)
 library(dplyr)
 library(tidyr)
 library(rhandsontable)
@@ -182,6 +183,8 @@ ui <- fluidPage(
     # Show a plot of the generated distribution
     mainPanel(
       h2("Medicare Benefits"),
+      plotOutput("ggplot_profitloss"),
+      plotOutput("ggplot_profitrel"),
       rHandsontableOutput("mbs_table"),
     )
   )
@@ -201,6 +204,123 @@ server <- function(input, output) {
     input$concessional_bulkbilled/100
   }) |>
     bindEvent(input$concessional_bulkbilled)
+
+  trimmed_service_table <- reactive({
+    values[["service_table"]] |>
+      # get rid of any rows with empty values
+      filter(!is.na(fee_names) & !is.na(service_fees) &
+               !is.na(incentive_by_fee) & !is.na(gap_fee) &
+               !is.na(service_proportion_bulk) &
+               !is.na(service_proportion_private))
+
+  }) |>
+    bindEvent(values[["service_table"]])
+
+  profit_loss <- reactive({
+    # a tibble/dataframe of profit-loss through a range of
+    # mean gap fees and concessional bulkbilling proportions
+    profit_loss <- tibble(
+      gap = numeric(),
+      concessional_bulkbilled = numeric(),
+      current_fee_mean = numeric(),
+      profit = numeric(),
+      profit_rel = numeric()
+    )
+
+    # mean gap fees from $0 to $60
+    gap_fee_range <- seq(from = 0, to = 70, by = 1)
+    # concessional bulk-billed range from 0 to 100%
+    concessional_bulkbilled_range <- seq(from = 0, to = 100, by = 1)
+
+    for (x in gap_fee_range) {
+      for (y in concessional_bulkbilled_range) {
+        new_gap_fee <- c(
+          rep(x, length((trimmed_service_table()$fee_names)))
+          # the same mean gap fee charged for every item, including GPMP/TCA/GPMPRV items
+        )
+        profit <- net_benefit(
+          service_fees = trimmed_service_table()$service_fees,
+          fee_names = trimmed_service_table()$fee_names,
+          service_proportion_bulk = trimmed_service_table()$service_proportion_bulk,
+          service_proportion_private = trimmed_service_table()$service_proportion_private,
+          gap_fee = new_gap_fee,
+          # set concessional bulk-billed proportion to 'x'
+          # divide by 100 to convert from
+          # percentage to proportion
+          concessional_bulkbilled = y/100,
+          individual_bulkbill_incentive,
+          individual_bulkbill_incentive_by_fee = trimmed_service_table()$incentive_by_fee,
+          input$monash,
+          universal_bulkbill_incentive
+        )
+        current_fee_mean <- fee_mean(
+          service_fees = trimmed_service_table()$service_fees,
+          fee_names = trimmed_service_table()$fee_names,
+          service_proportion_bulk = trimmed_service_table()$service_proportion_bulk,
+          service_proportion_private = trimmed_service_table()$service_proportion_private,
+          gap_fee = new_gap_fee,
+          # set concessional bulk-billed proportion to 'y'
+          # divide by 100 to convert from
+          # percentage to proportion
+          concessional_bulkbilled = y/100,
+          individual_bulkbill_incentive,
+          individual_bulkbill_incentive_by_fee = trimmed_service_table()$incentive_by_fee,
+          input$monash
+        )
+        profit_loss <- add_row(
+          profit_loss, gap = x,
+          concessional_bulkbilled = y,
+          current_fee_mean = current_fee_mean,
+          profit = profit,
+          profit_rel = profit / current_fee_mean * 100
+        )
+      }
+    }
+    browser()
+    profit_loss
+  }) |>
+    bindEvent(
+      trimmed_service_table(),
+      input$monash
+    )
+
+  output$ggplot_profitloss <- renderPlot({
+    ggplot(
+      data = profit_loss() |>
+        dplyr::filter(gap == (gap %/% 5 * 5), concessional_bulkbilled == (concessional_bulkbilled %/% 5 * 5)),
+      aes(x = gap, y = concessional_bulkbilled, fill = profit)) +
+      theme_bw() + geom_tile() +
+      geom_text(aes(label=round(profit, 2)), size = 8/.pt) +
+      labs(
+        x = "Mean Gap fee ($)",
+        y = "Concessional bulk-billed (%)",
+        fill = "Profit ($)"
+      ) +
+      scale_x_continuous(breaks = seq(from = 0, to = 70, by = 10)) +
+      scale_y_continuous(breaks = seq(from = 0, to = 100, by = 10)) +
+      ggtitle("Net benefit to practice, per service") +
+      scale_fill_gradientn(colors = rainbow(5), limits = c(-45, 45)) +
+      theme_tufte()
+  })
+
+  output$ggplot_profitrel <- renderPlot({
+    ggplot(
+      data = profit_loss() |>
+        dplyr::filter(gap == (gap %/% 5 * 5), concessional_bulkbilled == (concessional_bulkbilled %/% 5 * 5)),
+      aes(x = gap, y = concessional_bulkbilled, fill = profit_rel)) +
+      theme_bw() + geom_tile() +
+      geom_text(aes(label=round(profit_rel, 0)), size = 8/.pt) +
+      labs(
+        x = "Mean Gap fee ($)",
+        y = "Concessional bulk-billed (%)",
+        fill = "Revenue change (%)"
+      ) +
+      scale_x_continuous(breaks = seq(from = 0, to = 70, by = 10)) +
+      scale_y_continuous(breaks = seq(from = 0, to = 100, by = 10)) +
+      ggtitle("Percentage change in revenue (mean fee)") +
+      scale_fill_gradientn(colors = rainbow(5), limits = c(-45, 45)) +
+      theme_tufte()
+  })
 
   mean_fee = reactive({
     v <- trimmed_service_table() |>
@@ -261,25 +381,6 @@ server <- function(input, output) {
       concessional_bulkbilled()
     )
 
-  adjust_proportions = reactive({
-    browser()
-    v <- hot_to_r(input$mbs_table) |>
-      # if there are empty values in service_proportion_raw_* then replace with 0
-      replace_na(
-        list(
-          service_proportion_raw_bulk = 0,
-          service_proportion_raw_private = 0
-        )
-      ) |>
-      # recalculate service proportions
-      mutate(
-        service_proportion_bulk = service_proportion_raw_bulk/sum(service_proportion_raw_bulk),
-        service_proportion_private = service_proportion_raw_private/sum(service_proportion_raw_private)
-      )
-    values[["service_table"]] = v
-  }) |>
-    bindEvent(input$mbs_table)
-
   output$mean_fee <- renderText({
     sprintf(
       "Mean fee: $%.2f",
@@ -292,17 +393,6 @@ server <- function(input, output) {
       benefit_loss()
     )
   })
-
-  trimmed_service_table <- reactive({
-    values[["service_table"]] |>
-      # get rid of any rows with empty values
-      filter(!is.na(fee_names) & !is.na(service_fees) &
-               !is.na(incentive_by_fee) & !is.na(gap_fee) &
-               !is.na(service_proportion_bulk) &
-               !is.na(service_proportion_private))
-
-  }) |>
-    bindEvent(values[["service_table"]])
 
   output$mbs_table = renderRHandsontable({
     DT = NULL
