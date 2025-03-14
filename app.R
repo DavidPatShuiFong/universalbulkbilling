@@ -1,11 +1,6 @@
-#
-# This is a Shiny web application. You can run the application by clicking
-# the 'Run App' button above.
-#
-# Find out more about building applications with Shiny here:
-#
-#    https://shiny.posit.co/
-#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 library(shiny)
 library(tibble)
@@ -36,8 +31,7 @@ service_items <- read.csv("./medicarebenefits.csv") |>
     service_proportion_raw_bulk, service_proportion_raw_private
   )
 
-# the individual service bulk-bill incentive (dollars)
-# varies by location
+# the individual service bulk-bill incentive (dollars) varies by location
 #   Modified Monash areas 1, 2, 3+4, 5, 6, 7
 #   we will index the above to 1, 2, 3, 4, 5 and 6 (merging areas 3+4)
 
@@ -64,7 +58,7 @@ individual_bulkbill_incentive <- array(
 universal_bulkbill_incentive <- 0.125
 
 fee_mean <- function(
-    # calculate the current mean fee
+  # calculate the current mean fee
   service_fees,
   fee_names,
   service_proportion_bulk,
@@ -188,16 +182,21 @@ ui <- fluidPage(
       tabsetPanel(
         tabPanel(
           "Charts",
-          h2("Universal Bulk-Billing, Benefit-Loss charts"),
-          plotOutput("ggplot_profitloss"),
-          br(),
-          plotOutput("ggplot_profitrel"),
           br(), br(),
-          plotlyOutput("plotly_3d", width = "70vw", height = "60vh")
+          plotlyOutput("ggplot_profitloss"),
+          br(),
+          plotlyOutput("ggplot_profitrel")
+        ),
+        tabPanel(
+          "3D Plot",
+          br(), br(),
+          plotlyOutput("plotly_3d", width = "70vw", height = "70vh")
         ),
         tabPanel(
           "Medicare Benefit Schedule",
-          h2("Medicare Benefit Schedule table"),
+          br(),
+          h3("Medicare Benefit Schedule table"),
+          br(),
           rHandsontableOutput("mbs_table")
         )
       )
@@ -314,11 +313,22 @@ server <- function(input, output) {
       input$monash
     )
 
-  output$ggplot_profitloss <- renderPlot({
-    ggplot(
+  output$ggplot_profitloss <- renderPlotly({
+    p <- ggplot(
       data = profit_loss() |>
         dplyr::filter(gap == (gap %/% 5 * 5), concessional_bulkbilled == (concessional_bulkbilled %/% 5 * 5)),
-      aes(x = gap, y = concessional_bulkbilled, fill = profit)) +
+      aes(
+        x = gap,
+        y = concessional_bulkbilled,
+        fill = profit,
+        text = sprintf(
+          paste(
+            "Gap: $%d<br>Concessional bulk-billed: %d%%<br>Current fee mean: $%.2f<br>",
+            "Benefit: $%.2f<br>Revenue change (%%): %.1f%%", sep = ""
+          ),
+          gap, concessional_bulkbilled, current_fee_mean, profit, profit_rel
+        )
+      )) +
       theme_bw() + geom_tile() +
       geom_text(aes(label=round(profit, 2)), size = 8/.pt) +
       labs(
@@ -331,13 +341,26 @@ server <- function(input, output) {
       ggtitle("Net benefit to practice, per service") +
       scale_fill_gradientn(colors = rainbow(5), limits = c(-45, 45)) +
       theme_tufte()
+
+    ggplotly(p, tooltip = "text")
   })
 
-  output$ggplot_profitrel <- renderPlot({
-    ggplot(
+  output$ggplot_profitrel <- renderPlotly({
+    p <- ggplot(
       data = profit_loss() |>
         dplyr::filter(gap == (gap %/% 5 * 5), concessional_bulkbilled == (concessional_bulkbilled %/% 5 * 5)),
-      aes(x = gap, y = concessional_bulkbilled, fill = profit_rel)) +
+      aes(
+        x = gap,
+        y = concessional_bulkbilled,
+        fill = profit_rel,
+        text = sprintf(
+          paste(
+            "Gap: $%d<br>Concessional bulk-billed: %d%%<br>Current fee mean: $%.2f<br>",
+            "Benefit: $%.2f<br>Revenue change (%%): %.1f%%", sep = ""
+          ),
+          gap, concessional_bulkbilled, current_fee_mean, profit, profit_rel
+        )
+      )) +
       theme_bw() + geom_tile() +
       geom_text(aes(label=round(profit_rel, 1)), size = 8/.pt) +
       labs(
@@ -350,6 +373,8 @@ server <- function(input, output) {
       ggtitle("Percentage change in revenue (mean fee)") +
       scale_fill_gradientn(colors = rainbow(5), limits = c(-45, 45)) +
       theme_tufte()
+
+    ggplotly(p, tooltip = "text")
   })
 
   output$plotly_3d <- renderPlotly({
@@ -362,8 +387,8 @@ server <- function(input, output) {
         "Mean Gap fee: <b>$%{x}</b><br>",
         "Concessional bulk-billed: <b>%{y}</b>%<br>",
         "Current mean fee: <b>%{customdata:$.2f}</b><br>",
-        "Profit: <b>%{z:$.2f}</b><br>",
-        "Revenue change (%): <b>%{text:.0f}</b>%",
+        "Benefit: <b>%{z:$.2f}</b><br>",
+        "Revenue change (%): <b>%{text:.1f}</b>%",
         "<extra></extra>"
       ),
       marker = list(
