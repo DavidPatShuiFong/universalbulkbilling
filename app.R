@@ -79,9 +79,6 @@ fee_mean <- function(
 
   (1 - concessional_bulkbilled) * sum(service_fees * service_proportion_private) +
     concessional_bulkbilled * sum(service_fees * service_proportion_bulk) +
-    # the calculation above could be simplified, of course!, to
-    # sum(service_fees * service_proportion_private), but is kept
-    # separate to two different portions to clarify the calculation
 
     # calculate (and add) the individual service bulk-billing incentive applied
     # to patients currently concessionally bulk-billed
@@ -168,14 +165,31 @@ ui <- fluidPage(
         max = 100,
         value = 50
       ),
-      actionButton(
+      checkboxInput(
         inputId = "all_gapfees_confirm",
-        label = "Confirm"
+        label = "Enable to set ALL mean gapfees"
       ),
       br(), br(),
       textOutput("mean_fee"),
-      textOutput("benefit_loss"),
-      hr()
+      textOutput("simple_benefit"),
+      hr(),
+      tags$footer(
+        "Dr David Fong", br(),
+        icon("github"),
+        tags$a(
+          "Source code - review welcome",
+          target = "_blank",
+          href = "https://github.com/DavidPatShuiFong/universalbulkbilling"
+        ), br(),
+        "🄯",
+        tags$a(
+          "Mozilla Public License 2.0",
+          target = "_blank",
+          href = "https://www.mozilla.org/en-US/MPL/2.0/"
+        ), br(),
+        "Free for private use, Free for public benefit",
+        style = "width: 100%; color: black; text-align: center;"
+      )
     ),
     # Show a plot of the generated distribution
     mainPanel(
@@ -183,9 +197,7 @@ ui <- fluidPage(
         tabPanel(
           "Charts",
           br(), br(),
-          plotlyOutput("ggplot_profitloss"),
-          br(),
-          plotlyOutput("ggplot_profitrel")
+          plotlyOutput("ggplot_benefitloss"),
         ),
         tabPanel(
           "3D Plot",
@@ -219,15 +231,6 @@ server <- function(input, output) {
   }) |>
     bindEvent(input$concessional_bulkbilled)
 
-  observe({
-    # set all gap fees to the same value
-    values[["service_table"]] <-
-      values[["service_table"]] |>
-      mutate(gap_fee = input$all_gapfees)
-
-  }) |>
-    bindEvent(input$all_gapfees_confirm)
-
   trimmed_service_table <- reactive({
     values[["service_table"]] |>
       # get rid of any rows with empty values
@@ -240,21 +243,20 @@ server <- function(input, output) {
 
   plot_service_table <- reactive({
     trimmed_service_table() |>
-      # the plots use the gap_fee as variable, and do not need raw figures
+      # the plots use the gap_fee as a variable, and do not need raw figures
       select(-gap_fee, -service_proportion_raw_bulk, -service_proportion_raw_private)
   }) |>
-    bindCache(trimmed_service_table()) |>
     bindEvent(trimmed_service_table())
 
-  profit_loss <- reactive({
-    # a tibble/dataframe of profit-loss through a range of
+  benefit_loss <- reactive({
+    # a tibble/dataframe of benefit-loss through a range of
     # mean gap fees and concessional bulkbilling proportions
-    profit_loss <- tibble(
+    benefit_loss <- tibble(
       gap = numeric(),
       concessional_bulkbilled = numeric(),
       current_fee_mean = numeric(),
-      profit = numeric(),
-      profit_rel = numeric()
+      benefit = numeric(),
+      benefit_rel = numeric()
     )
 
     # mean gap fees from $0 to $60
@@ -268,7 +270,7 @@ server <- function(input, output) {
           rep(x, length((plot_service_table()$fee_names)))
           # the same mean gap fee charged for every item, including GPMP/TCA/GPMPRV items
         )
-        profit <- net_benefit(
+        benefit <- net_benefit(
           service_fees = plot_service_table()$service_fees,
           fee_names = plot_service_table()$fee_names,
           service_proportion_bulk = plot_service_table()$service_proportion_bulk,
@@ -297,81 +299,59 @@ server <- function(input, output) {
           individual_bulkbill_incentive_by_fee = plot_service_table()$incentive_by_fee,
           input$monash
         )
-        profit_loss <- add_row(
-          profit_loss, gap = x,
+        benefit_loss <- add_row(
+          benefit_loss, gap = x,
           concessional_bulkbilled = y,
           current_fee_mean = current_fee_mean,
-          profit = profit,
-          profit_rel = profit / current_fee_mean * 100
+          benefit = benefit,
+          benefit_rel = benefit / current_fee_mean * 100
         )
       }
     }
-    profit_loss
+    benefit_loss
   }) |>
     bindEvent(
       plot_service_table(),
       input$monash
     )
 
-  output$ggplot_profitloss <- renderPlotly({
+  output$ggplot_benefitloss <- renderPlotly({
+
+    limit <- max(abs(benefit_loss()$benefit)) * c(-1, 1)
+
     p <- ggplot(
-      data = profit_loss() |>
-        dplyr::filter(gap == (gap %/% 5 * 5), concessional_bulkbilled == (concessional_bulkbilled %/% 5 * 5)),
+      data = benefit_loss() |>
+        dplyr::filter(
+          gap == (gap %/% 5 * 5),
+          concessional_bulkbilled == (concessional_bulkbilled %/% 5 * 5)
+        ),
       aes(
         x = gap,
         y = concessional_bulkbilled,
-        fill = profit,
+        fill = benefit,
         text = sprintf(
           paste(
             "Gap: $%d<br>Concessional bulk-billed: %d%%<br>Current fee mean: $%.2f<br>",
             "Benefit: $%.2f<br>Revenue change (%%): %.1f%%", sep = ""
           ),
-          gap, concessional_bulkbilled, current_fee_mean, profit, profit_rel
+          gap, concessional_bulkbilled, current_fee_mean, benefit, benefit_rel
         )
       )) +
-      theme_bw() + geom_tile() +
-      geom_text(aes(label=round(profit, 2)), size = 8/.pt) +
+      geom_raster() +
+      geom_text(aes(label=round(benefit, 2)), size = 8/.pt) +
       labs(
         x = "Mean Gap fee ($)",
         y = "Concessional bulk-billed (%)",
-        fill = "Profit ($)"
+        fill = "Benefit ($)"
       ) +
       scale_x_continuous(breaks = seq(from = 0, to = 70, by = 10)) +
       scale_y_continuous(breaks = seq(from = 0, to = 100, by = 10)) +
       ggtitle("Net benefit to practice, per service") +
-      scale_fill_gradientn(colors = rainbow(5), limits = c(-45, 45)) +
-      theme_tufte()
-
-    ggplotly(p, tooltip = "text")
-  })
-
-  output$ggplot_profitrel <- renderPlotly({
-    p <- ggplot(
-      data = profit_loss() |>
-        dplyr::filter(gap == (gap %/% 5 * 5), concessional_bulkbilled == (concessional_bulkbilled %/% 5 * 5)),
-      aes(
-        x = gap,
-        y = concessional_bulkbilled,
-        fill = profit_rel,
-        text = sprintf(
-          paste(
-            "Gap: $%d<br>Concessional bulk-billed: %d%%<br>Current fee mean: $%.2f<br>",
-            "Benefit: $%.2f<br>Revenue change (%%): %.1f%%", sep = ""
-          ),
-          gap, concessional_bulkbilled, current_fee_mean, profit, profit_rel
-        )
-      )) +
-      theme_bw() + geom_tile() +
-      geom_text(aes(label=round(profit_rel, 1)), size = 8/.pt) +
-      labs(
-        x = "Mean Gap fee ($)",
-        y = "Concessional bulk-billed (%)",
-        fill = "Revenue change (%)"
+      scale_fill_distiller(
+        type = "div",
+        palette = "Spectral",
+        limit = limit
       ) +
-      scale_x_continuous(breaks = seq(from = 0, to = 70, by = 10)) +
-      scale_y_continuous(breaks = seq(from = 0, to = 100, by = 10)) +
-      ggtitle("Percentage change in revenue (mean fee)") +
-      scale_fill_gradientn(colors = rainbow(5), limits = c(-45, 45)) +
       theme_tufte()
 
     ggplotly(p, tooltip = "text")
@@ -379,9 +359,9 @@ server <- function(input, output) {
 
   output$plotly_3d <- renderPlotly({
     fig_plotly_3d <- plot_ly(
-      data = profit_loss(),
-      x = ~gap, y = ~concessional_bulkbilled, z = ~profit,
-      text = ~profit_rel, customdata = ~current_fee_mean,
+      data = benefit_loss(),
+      x = ~gap, y = ~concessional_bulkbilled, z = ~benefit,
+      text = ~benefit_rel, customdata = ~current_fee_mean,
       type = "scatter3d", mode = "markers",
       hovertemplate = paste(
         "Mean Gap fee: <b>$%{x}</b><br>",
@@ -392,13 +372,13 @@ server <- function(input, output) {
         "<extra></extra>"
       ),
       marker = list(
-        color = ~profit,
+        color = ~benefit,
         colorscale = "Rainbow",
       showscale = TRUE,
       line = list(width = 1, color = "DarkSlateGrey"))
     ) |>
       layout(
-        title = "Profit-loss according to mean gap fee and proportion concessional bulkbilled",
+        title = "Benefit-loss according to mean gap fee and proportion concessional bulkbilled",
         scene = list(
           xaxis = list(title = list(text = "Mean Gap fee ($)")),
           yaxis = list(
@@ -446,7 +426,7 @@ server <- function(input, output) {
       concessional_bulkbilled()
     )
 
-  benefit_loss = reactive({
+  simple_benefit = reactive({
     v <- trimmed_service_table()
     net_benefit(
       v$service_fees,
@@ -473,10 +453,10 @@ server <- function(input, output) {
       mean_fee()
     )
   })
-  output$benefit_loss <- renderText({
+  output$simple_benefit <- renderText({
     sprintf(
       "Net benefit: $%.2f",
-      benefit_loss()
+      simple_benefit()
     )
   })
 
@@ -497,6 +477,11 @@ server <- function(input, output) {
           service_proportion_bulk = service_proportion_raw_bulk/sum(service_proportion_raw_bulk),
           service_proportion_private = service_proportion_raw_private/sum(service_proportion_raw_private)
         )
+      if (input$all_gapfees_confirm) {
+        # set all gap fees to the same value
+        DT <- DT |>
+          mutate(gap_fee = input$all_gapfees)
+      }
       values[["service_table"]] = DT
     } else if (!is.null(values[["service_table"]])) {
       DT = values[["service_table"]]
@@ -530,6 +515,8 @@ server <- function(input, output) {
         min = 0
       )
   })
+  outputOptions(output, "mbs_table", suspendWhenHidden = FALSE)
+  # need to enable when hidden, as the table is on a sub-panel
 
 }
 
