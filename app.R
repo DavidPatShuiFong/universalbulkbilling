@@ -238,11 +238,12 @@ ui <- fluidPage(
           em("fee_names"), "- Name of MBS service item. *Only* service items to which bulk-billing incentives apply should be included in the table", br(),
           em("service_fees"), "- Medicare Benefit Schedule rebate, excluding incentives", br(),
           em("incentive_by_fee"), "- whether single- or triple- bulk-billing incentive applies", br(),
+          em("gap_fee"), "- ", "the mean gap fee charged when the service is not bulk-billed or the service has not received a bulk-bill incentive", br(),
           em("service_proportion_bulk_raw"), "and", "service_proportion_private_raw",
           "- the 'raw' number/proportion which the service item contributes to either",
           "'bulk-billed with incentive' services or 'other/private' services.", br(),
           "For simplicity, the same number can be used in both 'bulk' and 'private' columns.", br(),
-          "From the 'raw' numbers, a proportion is calculated (you cannot edit the calculated proportion column.",
+          "From the 'raw' numbers, a proportion is calculated (the calculated columns, 'service_proportion_bulk' and 'service_proportion_private', cannot be directly edited).",
           br(), br(),
           tags$footer(
             "Dr David Fong", br(),
