@@ -157,7 +157,8 @@ ui <- fluidPage(
         max = 100,
         value = 50
       ),
-      br(),
+      em("Proportion of services which are both currently bulk-billed AND receive bulk-bill incentives e.g. have a concession card"),
+      br(), br(),
       sliderInput(
         inputId = "all_gapfees",
         label = "Set mean of ALL gap fees ($)",
@@ -169,17 +170,29 @@ ui <- fluidPage(
         inputId = "all_gapfees_confirm",
         label = "Enable to set ALL mean gapfees"
       ),
+      em("The mean gap-fee for all services which were either not bulk-billed or charged without receiving current bulk-bill incentives."),
       br(), br(),
       textOutput("mean_fee"),
       textOutput("simple_benefit"),
+      textOutput("simple_benefit_relative"),
+      br(),
+      em("By default, all calculations ('simple' and the tables and plots) are based on 'average' MBS service item distribution"),
+      em("according to MBS statistics, 2024. MBS service item distribution can be changed through"),
+      em("the"), actionLink("jump_to_mbs_schedule", em("Medicare Benefits Schedule")), em(" tab."),
       hr(),
       tags$footer(
         "Dr David Fong", br(),
         icon("github"),
         tags$a(
-          "Source code - review welcome",
+          "Source code",
           target = "_blank",
           href = "https://github.com/DavidPatShuiFong/universalbulkbilling"
+        ), "- review welcome", br(),
+        icon("globe"), "Explanatory notes - ",
+        tags$a(
+          "www.davidfong.org",
+          target = "_blank",
+          href = "http://www.davidfong.org/post/universalbulkbilling-update/"
         ), br(),
         "🄯",
         tags$a(
@@ -194,10 +207,16 @@ ui <- fluidPage(
     # Show a plot of the generated distribution
     mainPanel(
       tabsetPanel(
+        id = "panels",
         tabPanel(
-          "Charts",
+          "Benefit-Loss",
           br(), br(),
           plotlyOutput("ggplot_benefitloss"),
+        ),
+        tabPanel(
+          "Relative benefit",
+          br(), br(),
+          plotlyOutput("ggplot_benefitrelative"),
         ),
         tabPanel(
           "3D Plot",
@@ -209,7 +228,48 @@ ui <- fluidPage(
           br(),
           h3("Medicare Benefit Schedule table"),
           br(),
-          rHandsontableOutput("mbs_table")
+          rHandsontableOutput("mbs_table"), br(), br(),
+          h3("Table editing"),
+          "By default, the table includes 'raw' numbers from Medicare Benefits Schedule statistics, 2020.",
+          "*Only* service items to which bulk-billing incentives apply should be included in this table.", br(),
+          "Using 'right-click', MBS service item rows can be added or removed.",
+          br(),
+          h4("Column description"),
+          em("fee_names"), "- Name of MBS service item. *Only* service items to which bulk-billing incentives apply should be included in the table", br(),
+          em("service_fees"), "- Medicare Benefit Schedule rebate, excluding incentives", br(),
+          em("incentive_by_fee"), "- whether single- or triple- bulk-billing incentive applies", br(),
+          em("service_proportion_bulk_raw"), "and", "service_proportion_private_raw",
+          "- the 'raw' number/proportion which the service item contributes to either",
+          "'bulk-billed with incentive' services or 'other/private' services.", br(),
+          "For simplicity, the same number can be used in both 'bulk' and 'private' columns.", br(),
+          "From the 'raw' numbers, a proportion is calculated (you cannot edit the calculated proportion column.",
+          br(), br(),
+          tags$footer(
+            "Dr David Fong", br(),
+            icon("github"),
+            tags$a(
+              "Source code",
+              target = "_blank",
+              href = "https://github.com/DavidPatShuiFong/universalbulkbilling"
+            ), "- review welcome", br(),
+            icon("globe"), "Explanatory notes - ",
+            tags$a(
+              "www.davidfong.org",
+              target = "_blank",
+              href = "http://www.davidfong.org/post/universalbulkbilling-update/"
+            ), br(),
+            "🄯",
+            tags$a(
+              "Mozilla Public License 2.0",
+              target = "_blank",
+              href = "https://www.mozilla.org/en-US/MPL/2.0/"
+            ), br(),
+            "Free for private use, Free for public benefit", br(), br(),
+            em("Privacy statement: This dashboard stores no information from the user"),
+            em("including any inputs or changes to the 'Medicare Benefits Schedule' table."),
+            style = "width: 100%; color: black; text-align: center;"
+          )
+
         )
       )
     )
@@ -217,7 +277,7 @@ ui <- fluidPage(
 )
 
 # Define server logic required to draw a histogram
-server <- function(input, output) {
+server <- function(input, output, session) {
 
   values = reactiveValues(
     service_table = service_items
@@ -230,6 +290,11 @@ server <- function(input, output) {
     input$concessional_bulkbilled/100
   }) |>
     bindEvent(input$concessional_bulkbilled)
+
+  observe({
+    updateTabsetPanel(session, "panels", "Medicare Benefit Schedule")
+  }) |>
+    bindEvent(input$jump_to_mbs_schedule)
 
   trimmed_service_table <- reactive({
     values[["service_table"]] |>
@@ -318,7 +383,7 @@ server <- function(input, output) {
   output$ggplot_benefitloss <- renderPlotly({
 
     limit <- max(abs(benefit_loss()$benefit)) * c(-1, 1)
-
+    # set limit to help colour-scale centre to zero
     p <- ggplot(
       data = benefit_loss() |>
         dplyr::filter(
@@ -339,6 +404,48 @@ server <- function(input, output) {
       )) +
       geom_raster() +
       geom_text(aes(label=round(benefit, 2)), size = 8/.pt) +
+      labs(
+        x = "Mean Gap fee ($)",
+        y = "Concessional bulk-billed (%)",
+        fill = "Benefit ($)"
+      ) +
+      scale_x_continuous(breaks = seq(from = 0, to = 70, by = 10)) +
+      scale_y_continuous(breaks = seq(from = 0, to = 100, by = 10)) +
+      ggtitle("Net benefit to practice, per service") +
+      scale_fill_distiller(
+        type = "div",
+        palette = "Spectral",
+        limit = limit
+      ) +
+      theme_tufte()
+
+    ggplotly(p, tooltip = "text")
+  })
+
+  output$ggplot_benefitrelative <- renderPlotly({
+
+    limit <- max(abs(benefit_loss()$benefit_rel)) * c(-1, 1)
+    # set limit to help colour-scale centre to zero
+    p <- ggplot(
+      data = benefit_loss() |>
+        dplyr::filter(
+          gap == (gap %/% 5 * 5),
+          concessional_bulkbilled == (concessional_bulkbilled %/% 5 * 5)
+        ),
+      aes(
+        x = gap,
+        y = concessional_bulkbilled,
+        fill = benefit_rel,
+        text = sprintf(
+          paste(
+            "Gap: $%d<br>Concessional bulk-billed: %d%%<br>Current fee mean: $%.2f<br>",
+            "Benefit: $%.2f<br>Revenue change (%%): %.1f%%", sep = ""
+          ),
+          gap, concessional_bulkbilled, current_fee_mean, benefit, benefit_rel
+        )
+      )) +
+      geom_raster() +
+      geom_text(aes(label=round(benefit_rel, 2)), size = 8/.pt) +
       labs(
         x = "Mean Gap fee ($)",
         y = "Concessional bulk-billed (%)",
@@ -449,14 +556,20 @@ server <- function(input, output) {
 
   output$mean_fee <- renderText({
     sprintf(
-      "Mean fee: $%.2f",
+      "Calculated Mean fee: $%.2f",
       mean_fee()
     )
   })
   output$simple_benefit <- renderText({
     sprintf(
-      "Net benefit: $%.2f",
+      "Calculated Net benefit: $%.2f",
       simple_benefit()
+    )
+  })
+  output$simple_benefit_relative <- renderText({
+    sprintf(
+      "Revenue change: %.1f %%",
+      simple_benefit()/mean_fee()*100
     )
   })
 
@@ -489,7 +602,8 @@ server <- function(input, output) {
 
     if (!is.null(DT))
       rhandsontable(
-        DT
+        DT,
+        stretchH = "all"
       ) |>
       hot_context_menu(
         # cannot change columns
