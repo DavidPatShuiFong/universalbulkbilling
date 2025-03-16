@@ -11,25 +11,30 @@ library(dplyr)
 library(tidyr)
 library(rhandsontable)
 library(htmlwidgets)
+library(tools)
+
+adapt_csv_table <- function(df) {
+  df |>
+    mutate(
+      service_proportion_raw_bulk = service_proportion_raw,
+      service_proportion_raw_private = service_proportion_raw
+    ) |>
+    mutate(
+      # create proportion columns (0 to 1) from raw proportion data
+      service_proportion_bulk = service_proportion_raw_bulk/sum(service_proportion_raw_bulk),
+      service_proportion_private = service_proportion_raw_private/sum(service_proportion_raw_private)
+    ) |>
+    select(
+      fee_names, service_fees, incentive_by_fee = individual_bulkbill_incentive_by_fee,
+      gap_fee,
+      service_proportion_bulk, service_proportion_private,
+      service_proportion_raw_bulk, service_proportion_raw_private
+    )
+}
 
 service_items <- read.csv("./medicarebenefits.csv") |>
-  # calculate the proportions
-  # for simplicity, assume the same proportions for concessionally bulk-billed patients
-  # and privately-billed patients
-  mutate(
-    service_proportion_raw_bulk = service_proportion_raw,
-    service_proportion_raw_private = service_proportion_raw
-  ) |>
-  mutate(
-    service_proportion_bulk = service_proportion_raw_bulk/sum(service_proportion_raw_bulk),
-    service_proportion_private = service_proportion_raw_private/sum(service_proportion_raw_private)
-  ) |>
-  select(
-    fee_names, service_fees, incentive_by_fee = individual_bulkbill_incentive_by_fee,
-    gap_fee,
-    service_proportion_bulk, service_proportion_private,
-    service_proportion_raw_bulk, service_proportion_raw_private
-  )
+  adapt_csv_table()
+
 
 # the individual service bulk-bill incentive (dollars) varies by location
 #   Modified Monash areas 1, 2, 3+4, 5, 6, 7
@@ -244,7 +249,20 @@ ui <- fluidPage(
           br(),
           h3("Medicare Benefit Schedule table"),
           br(),
-          rHandsontableOutput("mbs_table"), br(), br(),
+          tags$div(id = "mbs_table_placeholder"),
+          br(), br(),
+          fileInput("upload_mbs", "Upload MBS description table (.csv)", accept = c(".csv")),
+          "Upload your own Medicare Benefits description table!",
+          "For example, see ",
+          tags$a(
+            "'.csv' file on",
+            icon("github"), "Github,",
+            target = "_blank",
+            href = "https://github.com/DavidPatShuiFong/universalbulkbilling/blob/main/medicarebenefits.csv"
+          ),
+          "and column description below.",
+          "Must include columns:",
+          em("fee_names, service_fees", "service_proportion_raw", "gap_fee", "individual_bulkbill_incentive_by_fee"), ".",
           h3("Table editing"),
           "By default, the table includes 'raw' numbers from Medicare Benefits Schedule statistics, 2020.",
           "*Only* service items to which bulk-billing incentives apply should be included in this table.", br(),
@@ -297,8 +315,18 @@ ui <- fluidPage(
 server <- function(input, output, session) {
 
   values = reactiveValues(
-    service_table = service_items
+    service_table = service_items,
+    build_mbs_table = TRUE # will need to build service table
   )
+  # multiple tables could be created and destroyed
+  # unfortunately, shiny doesn't allow destruction of input$xxx
+  # which creates problems when trying to re-read the MBS rhandsonable from CSV
+  # as, by default, the rhandsonable attempts to read the input$xxx of the
+  # previously 'removed' table!
+  # mbs_table_version allows each created rhandsonable to have a different name,
+  # thereby avoiding the problem of the previous input$xxx still existing
+  mbs_table_version <- 1
+
 
   # the proportion (0 - 1) of patients who are both bulk-billed
   # AND currently qualify for the bulk-billing incentives
@@ -312,6 +340,40 @@ server <- function(input, output, session) {
     updateTabsetPanel(session, "panels", "Medicare Benefit Schedule")
   }) |>
     bindEvent(input$jump_to_mbs_schedule)
+
+  observe({
+    req(input$upload_mbs)
+
+    ext <- file_ext(input$upload_mbs$name)
+    data <- switch(
+      ext,
+      csv = read.csv(input$upload_mbs$datapath),
+      validate("Invalid file: please upload a '.csv' file")
+    )
+    if (
+      !all(
+        c(
+          "fee_names",
+          "service_fees",
+          "service_proportion_raw",
+          "gap_fee",
+          "individual_bulkbill_incentive_by_fee"
+          )
+        %in% colnames(data))
+      ) {
+      validate("Invalid file: must contain columns fee_names, service_fees, service_proportion_raw, gap_fee and individual_bulkbill_incentive_by_fee")
+    }
+    # copy to MBS service table after adaptation
+    # first remove MBS service table display
+    output[[paste0("mbs_table_", mbs_table_version)]] <- NULL
+    removeUI(selector = paste0("#mbs_table_", mbs_table_version), immediate = TRUE)
+    # then set values and prompt a MBS service table rebuild
+    values[["service_table"]] <- adapt_csv_table(data)
+    values[["build_mbs_table"]] <- TRUE
+    # increment mbs table version number (global variable)
+    mbs_table_version <<- mbs_table_version + 1
+  }) |>
+    bindEvent(input$upload_mbs)
 
   output$download <- downloadHandler(
     filename = function() {
@@ -604,64 +666,78 @@ server <- function(input, output, session) {
     )
   })
 
-  output$mbs_table = renderRHandsontable({
-    DT = NULL
-    if (!is.null(input$mbs_table)) {
-      DT = hot_to_r(input$mbs_table) |>
-        # if there are empty values in service_proportion_raw_* then replace with 0
-        # if a new row is created, it may contain lots of invalid NA values
-        replace_na(
-          list(
-            service_proportion_raw_bulk = 0,
-            service_proportion_raw_private = 0
-          )
-        ) |>
-        # recalculate service proportions
-        mutate(
-          service_proportion_bulk = service_proportion_raw_bulk/sum(service_proportion_raw_bulk),
-          service_proportion_private = service_proportion_raw_private/sum(service_proportion_raw_private)
-        )
-      if (input$all_gapfees_confirm) {
-        # set all gap fees to the same value
-        DT <- DT |>
-          mutate(gap_fee = input$all_gapfees)
-      }
-      values[["service_table"]] = DT
-    } else if (!is.null(values[["service_table"]])) {
-      DT = values[["service_table"]]
-    }
-
-    if (!is.null(DT))
-      rhandsontable(
-        DT,
-        stretchH = "all"
-      ) |>
-      hot_context_menu(
-        # cannot change columns
-        # (but rows can be added/removed)
-        allowColEdit = FALSE
-      ) |>
-      hot_col(
-        col = "incentive_by_fee",
-        # only allow two choices
-        type = "dropdown", source = c("single", "triple")
-      ) |>
-      hot_col(
-        col = c("service_proportion_bulk", "service_proportion_private"),
-        format = "0.00%",
-        readOnly = TRUE,
-      ) |>
-      hot_validate_numeric(
-        col = c(
-          "service_fees",
-          "service_proportion_raw_bulk", "service_proportion_raw_private"
-        ),
-        # cannot be negative numbers
-        min = 0
+  observe({
+    req(values[["build_mbs_table"]] == TRUE)
+    insertUI(
+      selector = '#mbs_table_placeholder',
+      ## wrap element in a div with id for ease of removal
+      ui = div(
+        rHandsontableOutput(paste0("mbs_table_", mbs_table_version))
       )
-  })
-  outputOptions(output, "mbs_table", suspendWhenHidden = FALSE)
-  # need to enable when hidden, as the table is on a sub-panel
+    )
+    output[[paste0("mbs_table_", mbs_table_version)]] = renderRHandsontable({
+      DT <- NULL
+      if (!is.null(input[[paste0("mbs_table_", mbs_table_version)]])) {
+        DT <- hot_to_r(input[[paste0("mbs_table_", mbs_table_version)]]) |>
+          # if there are empty values in service_proportion_raw_* then replace with 0
+          # if a new row is created, it may contain lots of invalid NA values
+          replace_na(
+            list(
+              service_proportion_raw_bulk = 0,
+              service_proportion_raw_private = 0
+            )
+          ) |>
+          # recalculate service proportions
+          mutate(
+            service_proportion_bulk = service_proportion_raw_bulk/sum(service_proportion_raw_bulk),
+            service_proportion_private = service_proportion_raw_private/sum(service_proportion_raw_private)
+          )
+        if (input$all_gapfees_confirm) {
+          # set all gap fees to the same value
+          DT <- DT |>
+            mutate(gap_fee = input$all_gapfees)
+        }
+        values[["service_table"]] <- DT
+
+      } else if (!is.null(values[["service_table"]])) {
+        DT <- values[["service_table"]]
+      }
+
+      if (!is.null(DT))
+        rhandsontable(
+          DT,
+          stretchH = "all"
+        ) |>
+        hot_context_menu(
+          # cannot change columns
+          # (but rows can be added/removed)
+          allowColEdit = FALSE
+        ) |>
+        hot_col(
+          col = "incentive_by_fee",
+          # only allow two choices
+          type = "dropdown", source = c("single", "triple")
+        ) |>
+        hot_col(
+          col = c("service_proportion_bulk", "service_proportion_private"),
+          format = "0.00%",
+          readOnly = TRUE,
+        ) |>
+        hot_validate_numeric(
+          col = c(
+            "service_fees",
+            "service_proportion_raw_bulk", "service_proportion_raw_private"
+          ),
+          # cannot be negative numbers
+          min = 0
+        )
+    })
+    # need to enable when hidden, as the table is on a sub-panel
+    outputOptions(output, paste0("mbs_table_", mbs_table_version), suspendWhenHidden = FALSE)
+    # remove build trigger
+    values[["build_mbs_table"]] <- FALSE
+  }) |>
+    bindEvent(values[["build_mbs_table"]])
 
 }
 
