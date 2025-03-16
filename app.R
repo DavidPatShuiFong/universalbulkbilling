@@ -212,6 +212,22 @@ ui <- fluidPage(
           "Benefit-Loss",
           br(), br(),
           plotlyOutput("ggplot_benefitloss"),
+          br(), br(),
+          "Calculated net benefit per service item if proposed universal bulk-billing adopted,",
+          "across a range of pre-existing proportion of patients bulk-billed (with existing bulk-billing incentives)",
+          "and mean gap fees charged for all other services (which would have qualified for bulk-billing incentive if the patient currently has a health care card etc., or will qualify for all patients under the universal bulk-billing proposal).",
+          br(), hr(),
+          downloadButton("download", "Download benefits '.csv' table"), br(), br(),
+          "Downloaded table format:", br(),
+          em("gap"),"- mean gap fee ($) for services which are billed to a patient without receiving a bulk-billing incentive (e.g. service for an adult without a concession card).",
+          "If these services were 'bulk-billed' to a patient with a concession card, then the service would attract a bulk-billing incentive.",
+          "Note that the 'mean' gap fee for these services includes services which are 'bulk-billed to patient who do not qualify for current bulk-billing incentives.", br(),
+          em("concessional_bulkbilled"), "- proportion (%) of services which are bulk-billed and receive a bulk-bill incentive payment.",
+          "This is a proportion of *all* services charged with these service item numbers.",
+          "Only services which potentially attract bulk-billing incentives should be included.", br(),
+          em("current_fee_mean"), "- the calculated mean fee for services.", br(),
+          em("benefit"), "- the mean benefit/cost per service of adopting universal bulk-billing.", br(),
+          em("benefit_rel"), "- the calculated change in revenue of adopting universal bulk-billing."
         ),
         tabPanel(
           "Relative benefit",
@@ -296,6 +312,20 @@ server <- function(input, output, session) {
     updateTabsetPanel(session, "panels", "Medicare Benefit Schedule")
   }) |>
     bindEvent(input$jump_to_mbs_schedule)
+
+  output$download <- downloadHandler(
+    filename = function() {
+      paste("UniversalBulkBill Benefits ", Sys.Date(), ".csv", sep = "")
+      },
+    content = function(file) {
+      write.csv(
+        x = benefit_loss(),
+        file = file,
+        row.names = FALSE
+      )
+    },
+    contentType = "text/csv"
+  )
 
   trimmed_service_table <- reactive({
     values[["service_table"]] |>
