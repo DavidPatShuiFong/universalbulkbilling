@@ -2,4 +2,4 @@ A dashboard to demonstrates the effect of pre-existing gap-fees, the proportion 
 
 The model is fully described at https://www.davidfong.org/post/universalbulkbilling-update/
 
-The dashboard is available at https://davidfong.shinyapps.io/universalbulkbilling
+The dashboard is available at https://shiny.davidfong.org/universalbulkbilling/ and https://davidfong.shinyapps.io/universalbulkbilling
