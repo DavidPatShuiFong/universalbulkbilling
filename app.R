@@ -11,7 +11,9 @@ library(dplyr)
 library(tidyr)
 library(rhandsontable)
 library(htmlwidgets)
+library(shinyalert)
 library(tools)
+library(readxl)
 
 adapt_csv_table <- function(df) {
   df |>
@@ -30,7 +32,6 @@ adapt_csv_table <- function(df) {
 
 service_items <- read.csv("./medicarebenefits.csv") |>
   adapt_csv_table()
-
 
 # the individual service bulk-bill incentive (dollars) varies by location
 #   Modified Monash areas 1, 2, 3+4, 5, 6, 7
@@ -218,7 +219,7 @@ ui <- fluidPage(
           "across a range of pre-existing proportion of patients bulk-billed (with existing bulk-billing incentives)",
           "and mean gap fees charged for all other services (which would have qualified for bulk-billing incentive if the patient currently has a health care card etc., or will qualify for all patients under the universal bulk-billing proposal).",
           br(), hr(),
-          downloadButton("download", "Download benefits '.csv' table"), br(), br(),
+          downloadButton("download", "Download benefits '.csv' or Excel table"), br(), br(),
           "Downloaded table format:", br(),
           em("gap"),"- mean gap fee ($) for services which are billed to a patient without receiving a bulk-billing incentive (e.g. service for an adult without a concession card).",
           "If these services were 'bulk-billed' to a patient with a concession card, then the service would attract a bulk-billing incentive.",
@@ -247,7 +248,7 @@ ui <- fluidPage(
           br(),
           tags$div(id = "mbs_table_placeholder"),
           br(), br(),
-          fileInput("upload_mbs", "Upload MBS description table (.csv)", accept = c(".csv")),
+          fileInput("upload_mbs", "Upload MBS description table (.csv or Excel)", accept = c(".csv", ".xls", ".xlsx")),
           "Upload your own Medicare Benefits description table!",
           "For examples, see ",
           tags$a(
@@ -273,33 +274,6 @@ ui <- fluidPage(
           "'bulk-billed with incentive' services or 'other/private' services.", br(),
           "For simplicity, the same number can be used in both 'bulk' and 'private' columns.", br(),
           "From the 'raw' numbers, a proportion is calculated (the calculated columns, 'service_proportion_bulk' and 'service_proportion_private', cannot be directly edited).",
-          br(), br(),
-          tags$footer(
-            "Dr David Fong", br(),
-            icon("github"),
-            tags$a(
-              "Source code",
-              target = "_blank",
-              href = "https://github.com/DavidPatShuiFong/universalbulkbilling"
-            ), "- review welcome", br(),
-            icon("globe"), "Explanatory notes - ",
-            tags$a(
-              "www.davidfong.org",
-              target = "_blank",
-              href = "http://www.davidfong.org/post/universalbulkbilling-update/"
-            ), br(),
-            "🄯",
-            tags$a(
-              "Mozilla Public License 2.0",
-              target = "_blank",
-              href = "https://www.mozilla.org/en-US/MPL/2.0/"
-            ), br(),
-            "Free for private use, Free for public benefit", br(), br(),
-            em("Privacy statement: This dashboard stores no information from the user"),
-            em("including any inputs or changes to the 'Medicare Benefits Schedule' table."),
-            style = "width: 100%; color: black; text-align: center;"
-          )
-
         )
       )
     )
@@ -343,7 +317,9 @@ server <- function(input, output, session) {
     data <- switch(
       ext,
       csv = read.csv(input$upload_mbs$datapath),
-      validate("Invalid file: please upload a '.csv' file")
+      xls = read_excel(input$upload_mbs$datapath),
+      xlsx = read_excel(input$upload_mbs$datapath),
+      validate("Invalid file: please upload a '.csv'/Excel file")
     )
     if (
       !all(
@@ -354,11 +330,18 @@ server <- function(input, output, session) {
           "service_proportion_raw_private",
           "gap_fee",
           "individual_bulkbill_incentive_by_fee"
-          )
-        %in% colnames(data))
+        )
+        %in% colnames(data)
+      )
       ) {
-      validate("Invalid file: must contain columns fee_names, service_fees, service_proportion_raw_bulk, service_proportion_raw_private, gap_fee and individual_bulkbill_incentive_by_fee")
-    }
+        shinyalert(
+          "Invalid spreadsheet",
+          "Must contain columns fee_names, service_fees, service_proportion_raw_bulk, service_proportion_raw_private, gap_fee and individual_bulkbill_incentive_by_fee",
+          type = "error"
+        )
+        return()
+      }
+
     # copy to MBS service table after adaptation
     # first remove MBS service table display
     output[[paste0("mbs_table_", mbs_table_version)]] <- NULL
