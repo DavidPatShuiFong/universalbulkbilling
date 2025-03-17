@@ -16,10 +16,6 @@ library(tools)
 adapt_csv_table <- function(df) {
   df |>
     mutate(
-      service_proportion_raw_bulk = service_proportion_raw,
-      service_proportion_raw_private = service_proportion_raw
-    ) |>
-    mutate(
       # create proportion columns (0 to 1) from raw proportion data
       service_proportion_bulk = service_proportion_raw_bulk/sum(service_proportion_raw_bulk),
       service_proportion_private = service_proportion_raw_private/sum(service_proportion_raw_private)
@@ -253,18 +249,17 @@ ui <- fluidPage(
           br(), br(),
           fileInput("upload_mbs", "Upload MBS description table (.csv)", accept = c(".csv")),
           "Upload your own Medicare Benefits description table!",
-          "For example, see ",
+          "For examples, see ",
           tags$a(
-            "'.csv' file on",
-            icon("github"), "Github,",
+            "'.csv' files on", icon("github"), "Github,",
             target = "_blank",
-            href = "https://github.com/DavidPatShuiFong/universalbulkbilling/blob/main/medicarebenefits.csv"
+            href = "https://github.com/DavidPatShuiFong/universalbulkbilling/"
           ),
           "and column description below.",
           "Must include columns:",
-          em("fee_names, service_fees", "service_proportion_raw", "gap_fee", "individual_bulkbill_incentive_by_fee"), ".",
+          em("fee_names, service_fees, service_proportion_raw_bulk, service_proportion_raw_private, gap_fee, individual_bulkbill_incentive_by_fee"), ".",
           h3("Table editing"),
-          "By default, the table includes 'raw' numbers from Medicare Benefits Schedule statistics, 2020.",
+          "By default, the table includes 'raw' numbers from Medicare Benefits Schedule statistics, 2024.",
           "*Only* service items to which bulk-billing incentives apply should be included in this table.", br(),
           "Using 'right-click', MBS service item rows can be added or removed.",
           br(),
@@ -273,7 +268,7 @@ ui <- fluidPage(
           em("service_fees"), "- Medicare Benefit Schedule rebate, excluding incentives", br(),
           em("incentive_by_fee"), "- whether single- or triple- bulk-billing incentive applies", br(),
           em("gap_fee"), "- ", "the mean gap fee charged when the service is not bulk-billed or the service has not received a bulk-bill incentive", br(),
-          em("service_proportion_bulk_raw"), "and", "service_proportion_private_raw",
+          em("service_proportion_raw_bulk"), "and", em("service_proportion_raw_private"),
           "- the 'raw' number/proportion which the service item contributes to either",
           "'bulk-billed with incentive' services or 'other/private' services.", br(),
           "For simplicity, the same number can be used in both 'bulk' and 'private' columns.", br(),
@@ -355,13 +350,14 @@ server <- function(input, output, session) {
         c(
           "fee_names",
           "service_fees",
-          "service_proportion_raw",
+          "service_proportion_raw_bulk",
+          "service_proportion_raw_private",
           "gap_fee",
           "individual_bulkbill_incentive_by_fee"
           )
         %in% colnames(data))
       ) {
-      validate("Invalid file: must contain columns fee_names, service_fees, service_proportion_raw, gap_fee and individual_bulkbill_incentive_by_fee")
+      validate("Invalid file: must contain columns fee_names, service_fees, service_proportion_raw_bulk, service_proportion_raw_private, gap_fee and individual_bulkbill_incentive_by_fee")
     }
     # copy to MBS service table after adaptation
     # first remove MBS service table display
@@ -542,11 +538,11 @@ server <- function(input, output, session) {
       labs(
         x = "Mean Gap fee ($)",
         y = "Concessional bulk-billed (%)",
-        fill = "Benefit ($)"
+        fill = "Change in revenue (%)"
       ) +
       scale_x_continuous(breaks = seq(from = 0, to = 70, by = 10)) +
       scale_y_continuous(breaks = seq(from = 0, to = 100, by = 10)) +
-      ggtitle("Net benefit to practice, per service") +
+      ggtitle("Change in revenue (%)") +
       scale_fill_distiller(
         type = "div",
         palette = "Spectral",

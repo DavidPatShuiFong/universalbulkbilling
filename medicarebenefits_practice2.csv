@@ -1,0 +1,19 @@
+fee_names,service_fees,service_proportion_raw_bulk,service_proportion_raw_private,gap_fee,individual_bulkbill_incentive_by_fee
+a,19.6,950,950,50,single
+b,42.85,3956,3956,50,triple
+c,82.9,4171,4171,50,triple
+d,122.15,1146,1146,50,triple
+e,197.9,75,75,50,triple
+GPMP,164.35,416,416,50,single
+TCA,130.25,402,402,50,single
+CDM RV,82.1,255,255,50,single
+HA701,67.6,0,0,50,single
+HA703,157.1,13,13,50,single
+HA705,216.8,101,101,50,single
+HA707,306.25,45,45,50,single
+HA715,241.85,1,1,50,single
+MHCP2700,81.7,7,7,50,single
+MHCP2701,120.25,5,5,50,single
+MHCP2715,103.7,64,64,50,single
+MHCP2717,152.8,31,31,50,single
+MHCP RV,81.7,41,41,50,single
