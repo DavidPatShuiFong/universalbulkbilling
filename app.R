@@ -20,11 +20,13 @@ adapt_csv_table <- function(df) {
     mutate(
       # create proportion columns (0 to 1) from raw proportion data
       service_proportion_bulk = service_proportion_raw_bulk/sum(service_proportion_raw_bulk),
-      service_proportion_private = service_proportion_raw_private/sum(service_proportion_raw_private)
+      service_proportion_private = service_proportion_raw_private/sum(service_proportion_raw_private),
+      # fix_gap is used to fix the gap fee when drawing plots
+      fix_gap = FALSE
     ) |>
     select(
       fee_names, service_fees, incentive_by_fee = individual_bulkbill_incentive_by_fee,
-      gap_fee,
+      gap_fee, fix_gap,
       service_proportion_bulk, service_proportion_private,
       service_proportion_raw_bulk, service_proportion_raw_private
     )
@@ -267,17 +269,38 @@ ui <- fluidPage(
           br(),
           tags$div(id = "mbs_table_placeholder"),
           br(), br(),
-          fileInput("upload_mbs", "Upload MBS description table (.csv or Excel)", accept = c(".csv", ".xls", ".xlsx")),
-          "Upload your own Medicare Benefits description table!",
-          "For examples, see ",
-          tags$a(
-            "'.csv' files on", icon("github"), "Github,",
-            target = "_blank",
-            href = "https://github.com/DavidPatShuiFong/universalbulkbilling/"
+          tabsetPanel(
+            tabPanel(
+              "Upload MBS description table",
+              br(),
+              fileInput("upload_mbs", "Choose MBS description table (.csv or Excel)", accept = c(".csv", ".xls", ".xlsx")),
+              "Upload your own Medicare Benefits description table!",
+              "For examples, see ",
+              tags$a(
+                "'.csv' files on", icon("github"), "Github,",
+                target = "_blank",
+                href = "https://github.com/DavidPatShuiFong/universalbulkbilling/"
+              ),
+              "and column description below.", br(),
+              "Must include columns:",
+              em("fee_names, service_fees, service_proportion_raw_bulk, service_proportion_raw_private, gap_fee, individual_bulkbill_incentive_by_fee"), ".",
+            ),
+            tabPanel(
+              "Set fix_gap for all services",
+              checkboxInput(
+                inputId = "fix_all_gap_fees_confirm",
+                label = "Set fix_gap for all services",
+                FALSE
+              ),
+              radioButtons(
+                inputId = "fix_all_gap_fees",
+                label = NULL,
+                inline = TRUE,
+                choiceNames = c("Off", "On"),
+                choiceValues = c(FALSE, TRUE)
+              )
+            )
           ),
-          "and column description below.",
-          "Must include columns:",
-          em("fee_names, service_fees, service_proportion_raw_bulk, service_proportion_raw_private, gap_fee, individual_bulkbill_incentive_by_fee"), ".",
           h3("Table editing"),
           "By default, the table includes 'raw' numbers from Medicare Benefits Schedule statistics, 2024.",
           "*Only* service items to which bulk-billing incentives apply should be included in this table.", br(),
@@ -288,6 +311,8 @@ ui <- fluidPage(
           em("service_fees"), "- Medicare Benefit Schedule rebate, excluding incentives", br(),
           em("incentive_by_fee"), "- whether single- or triple- bulk-billing incentive applies", br(),
           em("gap_fee"), "- ", "the mean gap fee charged when the service is not bulk-billed or the service has not received a bulk-bill incentive", br(),
+          em("fix_gap"), "- If ticked, then this service fee is 'fixed' to the 'gap' value when plotting tables and graphs, instead of varying from $0 to $70.",
+          "This might be useful if the clinic doesn't ever charge 'gap' fees for certain items e.g. health assessments.", br(),
           em("service_proportion_raw_bulk"), "and", em("service_proportion_raw_private"),
           "- the 'raw' number/proportion which the service item contributes to either",
           "'bulk-billed with incentive' services or 'other/private' services.", br(),
@@ -399,8 +424,8 @@ server <- function(input, output, session) {
 
   plot_service_table <- reactive({
     trimmed_service_table() |>
-      # the plots use the gap_fee as a variable, and do not need raw figures
-      select(-gap_fee, -service_proportion_raw_bulk, -service_proportion_raw_private)
+      # the plots do not need raw service figures
+      select(-service_proportion_raw_bulk, -service_proportion_raw_private)
   }) |>
     bindEvent(trimmed_service_table())
 
@@ -428,9 +453,15 @@ server <- function(input, output, session) {
 
     for (x in gap_fee_range) {
       for (y in concessional_bulkbilled_range) {
-        new_gap_fee <- c(
-          rep(x, length((plot_service_table()$fee_names)))
-          # the same mean gap fee charged for every item, including GPMP/TCA/GPMPRV items
+        new_gap_fee <- ifelse(
+          # if the gap-fee is set to 'fix_gap' then set to the gap fee in the table
+          # otherwise the mean gap fee is charged for all other items
+          #
+          # by *default* 'fix_gap is set to FALSE for all items
+          # so this tibble will change all the mean gap fees for every item
+          plot_service_table()$fix_gap,
+          plot_service_table()$gap_fee,
+          x
         )
         benefit <- net_benefit(
           service_fees = plot_service_table()$service_fees,
@@ -713,6 +744,11 @@ server <- function(input, output, session) {
           # set all gap fees to the same value
           DT <- DT |>
             mutate(gap_fee = input$all_gapfees)
+        }
+        if (input$fix_all_gap_fees_confirm) {
+          # set all
+          DT <- DT |>
+            mutate(fix_gap = as.logical(input$fix_all_gap_fees))
         }
         values[["service_table"]] <- DT
 
