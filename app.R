@@ -239,7 +239,13 @@ ui <- fluidPage(
         tabPanel(
           "3D Plot",
           br(), br(),
-          plotlyOutput("plotly_3d", width = "70vw", height = "70vh")
+          plotlyOutput("plotly_3d", width = "70vw", height = "70vh"),
+          br(),
+          selectInput(
+            inputId = "zaxis_plotly3d",
+            label = "Z-axis variable",
+            choices = c("Benefit ($)", "Revenue change (%)")
+          )
         ),
         tabPanel(
           "Medicare Benefit Schedule",
@@ -537,9 +543,22 @@ server <- function(input, output, session) {
   })
 
   output$plotly_3d <- renderPlotly({
+
+    if (input$zaxis_plotly3d == "Benefit ($)") {
+      # plot benefit ($) on z-axis
+      title_text <- "Benefit-loss according to mean gap fee and proportion concessional bulk-billed"
+      z_variable <- as.formula("~benefit")
+      zaxis_text <- "Net benefit<br>per service ($)"
+    } else if (input$zaxis_plotly3d == "Revenue change (%)") {
+      # plot change in revenue (%) on z-axis
+      title_text <- "Revenue change according to mean gap fee and proportion concessional bulk-billed"
+      z_variable <- as.formula("~benefit_rel")
+      zaxis_text <- "Revenue change (%)"
+    }
+
     fig_plotly_3d <- plot_ly(
       data = benefit_loss(),
-      x = ~gap, y = ~concessional_bulkbilled, z = ~benefit,
+      x = ~gap, y = ~concessional_bulkbilled, z = z_variable,
       text = ~benefit_rel, customdata = ~current_fee_mean,
       type = "scatter3d", mode = "markers",
       hovertemplate = paste(
@@ -557,14 +576,14 @@ server <- function(input, output, session) {
       line = list(width = 1, color = "DarkSlateGrey"))
     ) |>
       layout(
-        title = "Benefit-loss according to mean gap fee and proportion concessional bulkbilled",
+        title = title_text,
         scene = list(
           xaxis = list(title = list(text = "Mean Gap fee ($)")),
           yaxis = list(
             title = list(text = "Concessional<br>bulk-billed (%)"),
             autorange = "reversed"
           ),
-          zaxis = list(title = list(text = "Net benefit<br>per service ($)")),
+          zaxis = list(title = list(text = zaxis_text)),
           # place viewpoint a little further away
           camera = list(eye = list(x = 1.75, y = 1.75, z = 1.25)),
           aspectmode = "cube"
