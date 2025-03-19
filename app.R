@@ -241,10 +241,23 @@ ui <- fluidPage(
           br(), br(),
           plotlyOutput("plotly_3d", width = "70vw", height = "70vh"),
           br(),
-          selectInput(
-            inputId = "zaxis_plotly3d",
-            label = "Z-axis variable",
-            choices = c("Benefit ($)", "Revenue change (%)")
+          fluidRow(
+            column(
+              width = 4, offset = 2,
+              selectInput(
+                inputId = "zaxis_plotly3d",
+                label = "Z-axis variable",
+                choices = c("Benefit ($)", "Revenue change (%)")
+              )
+            ),
+            column(
+              width = 4,
+              selectInput(
+                inputId = "table_resolution",
+                label = "Resolution of table",
+                choices = c("5", "2.5")
+              )
+            )
           )
         ),
         tabPanel(
@@ -403,9 +416,15 @@ server <- function(input, output, session) {
     )
 
     # mean gap fees from $0 to $60
-    gap_fee_range <- seq(from = 0, to = 70, by = 5)
+    gap_fee_range <- seq(
+      from = 0, to = 70,
+      by = as.numeric(input$table_resolution)
+    )
     # concessional bulk-billed range from 0 to 100%
-    concessional_bulkbilled_range <- seq(from = 0, to = 100, by = 5)
+    concessional_bulkbilled_range <- seq(
+      from = 0, to = 100,
+      by = as.numeric(input$table_resolution)
+    )
 
     for (x in gap_fee_range) {
       for (y in concessional_bulkbilled_range) {
@@ -455,7 +474,7 @@ server <- function(input, output, session) {
   }) |>
     bindEvent(
       plot_service_table(),
-      input$monash
+      input$monash, input$table_resolution
     )
 
   output$ggplot_benefitloss <- renderPlotly({
