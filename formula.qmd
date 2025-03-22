@@ -1,0 +1,536 @@
+---
+title: "Universal Bulk Billing mathematics"
+author: "David Fong"
+format: 
+  pdf: default
+  html: default
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+#| echo: true
+#| error: false
+#| warning: false
+#| code-fold: true
+#| code-overflow: wrap
+#| results: asis
+
+library(tibble)
+library(plotly)
+library(ggplot2)
+library(dplyr)
+
+fee_names <- c("a", "b", "c", "d", "e")
+service_fees <- array(
+  data = c(19.6, 42.85, 82.90, 122.15, 197.9),
+  dim = c(length(fee_names), 1),
+  dimnames = list(fee_names, "fee")
+)
+
+# the proportion which each item is billed
+
+# raw figures are derived for calendar year 2024 Australia-wide
+# http://medicarestatistics.humanservices.gov.au/statistics/mbs_item.jsp
+service_proportion_raw <- array(
+  data = c(4037130, 81240293, 19899953, 1609147, 174664),
+  dim = c(length(fee_names), 1),
+  dimnames = list(fee_names, "n")
+)
+
+# calculate the proportions
+# for simplicity, assume the same proportions for bulk-billed patients
+# and privately-billed patients
+service_proportion_bulk <- service_proportion_raw/sum(service_proportion_raw)
+colnames(service_proportion_bulk) <- c("proportion")
+service_proportion_private <- service_proportion_bulk
+
+# Set the mean gap fee for the individual service items A, B, C, D and E
+# for patients who were privately billed
+# for simplicity, set to the same fee of $50
+gap_fee <- array(
+  data = rep(50, length(fee_names)),
+  dim = c(length(fee_names), 1),
+  dimnames = list(fee_names, "gap")
+)
+
+# the proportion of patients who are concessional bulkbilled
+# set to 50%
+concessional_bulkbilled <-  0.5
+
+# the bulk billing incentive, in dollars
+# varies by location
+# Modified Monash areas 1, 2, 3+4, 5, 6, 7
+# we will index the above to 1, 2, 3, 4, 5 and 6 (merging areas 3+4)
+
+# see https://www9.health.gov.au/mbs/search.cfm
+n_monash <- 6 # six different Monash areas
+
+individual_bulkbill_incentive <- array(
+  # there are two different individual bulk-billing incentive fees,
+  # 'standard' and 'triple'
+  data = c(
+    # standard bulk-billing incentive applies to service items like item A/'3'
+    # items 10990, 10991, 75855, 75856, 75857, 75858
+    c(7.15, 10.80, 11.45, 12.20, 12.85, 13.70),
+    # triple bulk-billing incentive applies to service items like item B, C and D
+    # items 75870, 75871, 75873, 75874, 75875, 75876
+    c(21.35, 32.50, 34.50, 36.65, 38.70, 41.10)
+  ),
+  dim = c(n_monash, 2),
+  dimnames = list(c("1", "2", "3+4", "5", "6", "7"), c("single", "triple"))
+)
+
+# does the single- or triple- incentive apply to the fee item?
+individual_bulkbill_incentive_by_fee <- 
+  c("single", "triple", "triple", "triple", "triple")
+
+# set the Monash area to the city
+monash_area <- "1"
+
+# universal bulk billing incentive
+# over the service fee
+# set to 12.5%
+universal_bulkbill_incentive <- 0.125
+
+# show individual bulk-bill incentive applicable to defined Monash area
+fee_bulkbill_incentive <- individual_bulkbill_incentive[monash_area, individual_bulkbill_incentive_by_fee]
+# redefine dimensions of the array
+dim(fee_bulkbill_incentive) <- c(length(fee_names), 1)
+# change rownames to the fee names
+rownames(fee_bulkbill_incentive) <- fee_names
+
+fee_mean <- function(
+  # calculate the current mean fee
+  service_fees,
+  fee_names,
+  service_proportion_bulk,
+  service_proportion_private,
+  gap_fee,
+  concessional_bulkbilled,
+  individual_bulkbill_incentive,
+  individual_bulkbill_incentive_by_fee,
+  monash_area
+) {
+  # calculate individual bulk-bill incentive applicable to defined Monash area
+  fee_bulkbill_incentive <- 
+    individual_bulkbill_incentive[monash_area, individual_bulkbill_incentive_by_fee]
+  # re-define dimensions of the 'x' array
+  dim(fee_bulkbill_incentive) <- c(length(fee_names), 1)
+  # change row name to the fee names
+  rownames(fee_bulkbill_incentive) <- fee_names
+  
+  (1 - concessional_bulkbilled) *
+    sum(service_fees * service_proportion_private) +
+    (concessional_bulkbilled) *
+    sum(service_fees * service_proportion_bulk) +
+    # the calculation above could be simplified, of course!, to
+    # sum(service_fees * service_proportion_private), but is kept
+    # separate to two different portions to clarify the calculation
+    
+    # calculate (and add) the individual service bulk-billing incentive applied
+    # to patients currently bulk-billed
+    concessional_bulkbilled * 
+    sum(service_proportion_private * fee_bulkbill_incentive) +
+    
+    # calculate (and add) the private 'gap' fee
+    (1 - concessional_bulkbilled) * sum(service_proportion_private * gap_fee)
+}
+
+net_benefit <- function(
+  # calculate the average net benefit revenue
+  # to the practice per patient
+  
+  # the variable names used in this function
+  # are the same as used in previous code chunks
+  # but will be 'local' to this function
+  service_fees,
+  fee_names,
+  service_proportion_bulk,
+  service_proportion_private,
+  gap_fee,
+  concessional_bulkbilled,
+  individual_bulkbill_incentive,
+  individual_bulkbill_incentive_by_fee,
+  monash_area,
+  universal_bulkbill_incentive) {
+  # calculate individual bulk-bill incentive applicable to defined Monash area
+  fee_bulkbill_incentive <- individual_bulkbill_incentive[monash_area, individual_bulkbill_incentive_by_fee]
+  # re-define dimensions of the 'x' array
+  dim(fee_bulkbill_incentive) <- c(length(fee_names), 1)
+  # change row name to the fee names
+  rownames(fee_bulkbill_incentive) <- fee_names
+  
+  # calculate the universal bulk-bill incentive
+  # for patients formerly privately-billed
+  (1 - concessional_bulkbilled) *
+    sum(service_fees * service_proportion_private) *
+    universal_bulkbill_incentive +
+    # calculate (and add) benefit for patients already bulk-billed
+    concessional_bulkbilled *
+    sum(service_fees * service_proportion_bulk) *
+    universal_bulkbill_incentive +
+    
+    # calculate (and add) the individual service bulk-billing incentive applied
+    # to patients formerly privately-billed
+    (1 - concessional_bulkbilled) * sum(service_proportion_private * fee_bulkbill_incentive) -
+    
+    # calculate (and subtract) the loss from not charging a private 'gap' fee
+    (1 - concessional_bulkbilled) * sum(service_proportion_private * gap_fee)
+}
+
+# mean gap fees from $0 to $60
+gap_fee_range <- seq(from = 0, to = 70, by = 1)
+# privately billed range from 0 to 100%
+concessional_bulkbilled_range <- seq(from = 0, to = 100, by = 1)
+
+# this model is based on the first practice model described above
+# together with care plan item numbers
+# add new service fee descriptions
+new_fee_names <- c(
+  fee_names,
+  # append chronic disease item numbers (721, 723, 732)
+  # health assessment item numbers (701 -- 715)
+  # and mental health care plan item numbers (2700 -- 271)
+  c("GPMP", "TCA", "CDM RV",
+    "HA701", "HA703", "HA705", "HA707", "HA715",
+    "MHCP2700", "MHCP2701", "MHCP2715", "MHCP2717", "MHCP RV")
+)
+new_service_fees <- array(
+  # append fees for 721, 723 and 732
+  data = c(service_fees,
+           164.35, 130.25, 82.10,
+           67.60, 157.10, 216.80, 306.25, 241.85,
+           81.70, 120.25, 103.70, 152.80, 81.70
+           ),
+  dim = c(length(new_fee_names), 1),
+  dimnames = list(new_fee_names, "fee")
+)
+new_individual_bulkbill_incentive_by_fee <- c(
+  individual_bulkbill_incentive_by_fee,
+  rep("single", 3+5+5)
+)
+# and new service proportions
+# from http://medicarestatistics.humanservices.gov.au/statistics/mbs_item.jsp (2024)
+new_practice_service_raw <- 
+  # A, B, C, D, E service items
+  # and GPMP/TCA/reviews (CDM), health assessment and mental health plan items
+  c(4037130, 81240293, 19899953, 1609147, 174664,
+    3357364, 2954994, 4319542,
+    21383, 165878, 273690, 463237, 263931,
+    97733, 31550, 904320, 211540, 504901)
+new_practice_service_proportions <- 
+  new_practice_service_raw/sum(new_practice_service_raw)
+
+benefit_loss_practice_standard <- tibble(
+  gap = numeric(), 
+  concessional_bulkbilled = numeric(), 
+  current_fee_mean = numeric(),
+  benefit = numeric(),
+  benefit_rel = numeric(),
+)
+
+for (x in gap_fee_range) {
+  for (y in concessional_bulkbilled_range) {
+    new_gap_fee <- c(
+      rep(x, 5),
+      rep(x, length((new_fee_names))-5)
+      # mean gap fee charged for ABCDE, $0 for all others
+    )
+    
+    current_fee_mean <- fee_mean(
+      service_fees = new_service_fees,
+      fee_names = new_fee_names,
+      service_proportion_bulk = new_practice_service_proportions,
+      service_proportion_private = new_practice_service_proportions,
+      gap_fee = new_gap_fee,
+      # set concessionally bulk-billed proportion to 'y'
+      # divide by 100 to convert from
+      # percentage to proportion
+      concessional_bulkbilled = y/100,
+      individual_bulkbill_incentive,
+      individual_bulkbill_incentive_by_fee = new_individual_bulkbill_incentive_by_fee,
+      monash_area
+    )
+
+    benefit <- net_benefit(
+      service_fees = new_service_fees,
+      fee_names = new_fee_names,
+      service_proportion_bulk = new_practice_service_proportions,
+      service_proportion_private = new_practice_service_proportions,
+      gap_fee = new_gap_fee,
+      # set concessional bulk-billed proportion to 'y'
+      # divide by 100 to convert from
+      # percentage to proportion
+      concessional_bulkbilled = y/100,
+      individual_bulkbill_incentive,
+      individual_bulkbill_incentive_by_fee = new_individual_bulkbill_incentive_by_fee,
+      monash_area,
+      universal_bulkbill_incentive
+    )
+    benefit_loss_practice_standard <- add_row(
+      benefit_loss_practice_standard,
+      gap = x, concessional_bulkbilled = y,
+      current_fee_mean = current_fee_mean,
+      benefit = benefit,
+      benefit_rel = benefit/current_fee_mean * 100
+    )
+  }
+}
+
+# this plot cannot be shown in the web-browser using this code block!
+# you will need to copy this code (and all the pre-requisites)
+# into a 'R/RStudio' and run it yourself :)
+fig_plotly_3d <- plot_ly(
+  data = benefit_loss_practice_standard,
+  x = ~gap, y = ~concessional_bulkbilled, z = ~benefit_rel,
+  text = ~benefit, customdata = ~current_fee_mean,
+  type = "scatter3d", mode = "markers",
+  hovertemplate = paste(
+    "Mean Gap fee: <b>$%{x}</b><br>",
+    "Concessional bulk-billed: <b>%{y}</b>%<br>",
+    "Current mean fee: <b>%{customdata:$.2f}</b><br>",
+    "Benefit: <b>%{text:$.2f}</b><br>",
+    "Revenue change: <b>%{z:.0f}</b>%",
+    "<extra></extra>"
+  ),
+  marker = list(
+    color = ~benefit_rel,
+    colorscale = "Rainbow",
+    showscale = TRUE,
+    line = list(width = 1, color = "DarkSlateGrey")) 
+  ) |>
+  layout(
+    title = "Revenue change according to mean gap fee and proportion concessional bulkbilled",
+    scene = list(
+      xaxis = list(title = list(text = "Mean Gap fee ($)")),
+      yaxis = list(
+        title = list(text = "Concessional<br>bulk-billed (%)"),
+        autorange = "reversed"
+      ),
+      zaxis = list(title = list(text = "Revenue change (%)"))
+    ),
+    margin = list(r = 150)
+    # coloraxis = list(colorbar = list(x = 0.6))
+    # move the color legend to the left a little
+  )
+
+# this plot cannot be shown in the web-browser using this code block!
+# you will need to copy this code (and all the pre-requisites)
+# into a 'R/RStudio' and run it yourself :)
+fig_ggplotly <- ggplot(
+  data = benefit_loss_practice_standard,
+  aes(x = gap, y = concessional_bulkbilled))+
+  geom_point(
+    aes(fill = benefit),
+    size = 4, shape = 22, stroke = 0
+  ) +
+  scale_fill_viridis_c(option = "turbo", direction = -1)
+# to look at this plot, either 'fig_ggplotly' in R/RStudio or
+# 'ggplotly(fig_ggplotly)'
+
+fig_plotly_3d # show the 3D Plotly
+```
+
+You can add options to executable code like this
+
+```{r}
+new_practice_service_raw_2 <- 
+  # A, B, C, D, E service items
+  # and GPMP/TCA/reviews (CDM), health assessment and mental health plan items
+  c(950, 3956, 4171, 1146, 75,
+    416, 402, 255,
+    0, 13, 101, 45, 1,
+    7, 5, 64, 31, 41)
+new_practice_service_proportions_2 <- 
+  new_practice_service_raw_2/sum(new_practice_service_raw_2)
+
+benefit_loss <- tibble(
+  gap = numeric(), 
+  concessional_bulkbilled = numeric(),
+  current_fee_mean = numeric(),
+  benefit = numeric(),
+  benefit_rel = character()
+)
+
+for (x in gap_fee_range) {
+  for (y in concessional_bulkbilled_range) {
+    new_gap_fee <- c(
+      rep(x, length((new_fee_names)))
+      # the same mean gap fee charged for every item, including GPMP/TCA/GPMPRV items
+      # a simplified approach would use the 'average' mean gap fee charged
+      # for all relevant items
+    )
+    current_fee_mean <- fee_mean(
+      service_fees = new_service_fees,
+      fee_names = new_fee_names,
+      # set service proportions to longer consults
+      service_proportion_bulk = new_practice_service_proportions_2,
+      service_proportion_private = new_practice_service_proportions_2,
+      gap_fee = new_gap_fee,
+      # set concessional bulk-billed proportion to 'y'
+      # divide by 100 to convert from
+      # percentage to proportion
+      concessional_bulkbilled = y/100,
+      individual_bulkbill_incentive,
+      individual_bulkbill_incentive_by_fee = new_individual_bulkbill_incentive_by_fee,
+      monash_area
+    )
+    benefit <- net_benefit(
+      service_fees = new_service_fees,
+      fee_names = new_fee_names,
+      # set service proportions to longer consults
+      service_proportion_bulk = new_practice_service_proportions_2,
+      service_proportion_private = new_practice_service_proportions_2,
+      gap_fee = new_gap_fee,
+      # set concessional bulk-billed proportion to 'y'
+      # divide by 100 to convert from
+      # percentage to proportion
+      concessional_bulkbilled = y/100,
+      individual_bulkbill_incentive,
+      individual_bulkbill_incentive_by_fee = new_individual_bulkbill_incentive_by_fee,
+      monash_area,
+      universal_bulkbill_incentive
+    )
+    benefit_loss <- add_row(
+      benefit_loss,
+      gap = x, concessional_bulkbilled = y,
+      current_fee_mean = current_fee_mean,
+      benefit = benefit, 
+      benefit_rel = formatC((benefit / current_fee_mean * 100), digits = 0, format = "f")
+    )
+  }
+}
+
+# this plot cannot be shown in the web-browser using this code block!
+# you will need to copy this code (and all the pre-requisites)
+# into a 'R/RStudio' and run it yourself :)
+fig_ggplotly <- ggplot(
+  data = benefit_loss,
+  aes(
+    x = gap, y = concessional_bulkbilled, 
+    text = sprintf(
+      paste(
+        "Gap: $%d<br>Concessional bulk-billed: %d%%<br>Current fee mean: $%.2f<br>",
+        "Benefit: $%.2f<br>Revenue change: %s%%", sep = ""
+      ),
+      gap, concessional_bulkbilled, current_fee_mean, benefit, benefit_rel
+    )
+  )) +
+  geom_point(
+    aes(fill = benefit),
+    size = 4, shape = 22, stroke = 0
+  ) +
+  labs(
+    x = "Mean Gap fee ($)",
+    y = "Concessional bulk-billed (%)",
+    fill = "Benefit ($)"
+  ) +
+  scale_fill_viridis_c(option = "turbo", direction = -1)
+# to look at this plot, either 'fig_ggplotly' in R/RStudio or
+# 'ggplotly(fig_ggplotly)'
+
+ggplotly(fig_ggplotly, tooltip = "text") |> # show the ggplotly
+  layout(margin = list(r = 150))
+```
+Mean service revenue before adopting universal bulk-billing $r_0$
+
+$$
+\small
+\begin{aligned}
+r_0 &= bx + bi + (1-b)x + (1-b)g\\
+&= x + g + b(i-g) &(1)\\
+\end{aligned}
+$$
+
+$$
+\small
+\begin{aligned}
+\text{where }b &= \text{proportion of patients bulk-billed concesionally (0-1)}\\
+x &= \text{mean service fee}\\
+i &= \text{mean individual service bulk-billing incentive}\\
+g &= \text{mean gap-fee when patient not bulk-billed with incentive fee}\\
+\end{aligned}
+$$
+
+Mean service revenue after adopting universal bulk-billing $r_1$
+
+$$
+\small
+\begin{aligned}
+r_1 &= ux + i &(2)\\
+\end{aligned}
+$$
+
+$$
+\small
+\begin{aligned}
+\text{where } u &= \text{ rebates plus quarterly bonus} = 1.125\\
+x &= \text{ mean service fee}\\
+i &= \text{ mean individual service bulk-billing incentive}\\
+\end{aligned}
+$$
+
+#### Mean benefit per service ($) of adoping universal bulk-billing
+
+Mean benefit per service of adopting universal bulk-billing $p$
+
+$$
+\small
+\begin{aligned}
+p &= r_1 - r_0 \\
+&= x(u-1) - (g-i)(1-b)&(3)\\
+\end{aligned}
+$$
+
+Implications of equation for $p$ (Equation 3):
+
+* The greater the mean service fee $x$ the greater the mean benefit (per-service) $p$ of adopting universal bulk-billing i.e. $p\propto x$
+  + $x$ may increase if longer consult items ('C' vs 'B') are used, or if higher-rebate items are more frequently used e.g. care plans and health assessment.
+* The greater the mean gap-fee $g$ increases over and above the mean individual service bulk-billing incentive $i$, the less the mean benefit (per-service) $p$ of adopting universal bulk billing i.e. $p\propto-(g-i)$
+  + The mean gap-fee $g$ is less than the 'nominal' gap-fee if the gap-fee is not charged for all relevant services e.g. care-plans, health assessments, reviews.
+  + For example, if a nominal gap-fee of 35 dollars is charged for only 50% of services which don't attract a current bulk-billing incentive, then the mean-gap fee $g$ will be 17.5 dollars.
+  + The mean individual service bulk-billing incentive $i$ can change with service billing patterns, as some services attract a 'single' incentive of `{r} individual_bulkbill_incentive["1", "single"]` or a 'triple' incentive of `{r} individual_bulkbill_incentive["1", "triple"]` (in Monash Area 1).
+    - For example, if a clinic charges more care plans (which attract a single incentive) and less BCDE services (which attract a triple incentive), then $i$ will be reduced.
+    - For the 'average' general practice, according to MBS 2024 figures, $i$ is `{r} sprintf("%.2f" ,sum(individual_bulkbill_incentive["1", new_individual_bulkbill_incentive_by_fee] * new_practice_service_proportions))`. For the practice which does - relatively - more care plans and described as 'practice 2' above, $i$ is `{r} sprintf("%.2f" ,sum(individual_bulkbill_incentive["1", new_individual_bulkbill_incentive_by_fee] * new_practice_service_proportions_2))`. 
+* As pre-existing bulk-billing (with existing bulk-billing incentives) increases $(b \to 1)$, the less influence the difference between mean gap-fee $g$ and mean bulk-billing incentive fee $i$ have over mean benefit per-service $p$ i.e. $\displaystyle{\lim_{b\to1} p(b) = x(u-1)}$. Conversely, as $b \to 0$, the greater the influence of $(g-i)$ on $p$. 
+
+#### Relative benefit of adopting universal bulk-billing
+
+The *relative* benefit of adopting universal bulk-billing $q$
+
+$$
+\small
+\begin{aligned}
+q &= \frac{p}{r_0}\\
+&= \frac{x(u-1) + (i-g)(1-b)}{x + g + b(i-g)} &(4)\\
+&= \frac{x(u-1) - (g-i)(1-b)}{x + (g-i)(1-b) + i} &(5)\\
+\end{aligned}
+$$
+
+$$
+\small
+\begin{aligned}
+\text{where } x &= \text{mean service fee}\\
+u &= \text{rebates plus quarterly bonus} = 1.125\\
+g &= \text{mean gap-fee when patient not bulk-billed with incentive fee}\\
+i &= \text{mean individual service bulk-billing incentive}\\
+b &= \text{proportion of patients bulk-billed concesionally (0-1)}\\
+\end{aligned}
+$$
+
+Implications of equation for $q$ (Equation 5)
+
+* As the mean service fee $x$ increases $(x \to \infty)$ then $q \to (u-1)$ i.e. $\displaystyle{\lim_{x \to \infty} q(x) = 0.125}$
+* $q$ is quite sensitive to $(g-i)(1-b)$, which appears in both the numerator and denominator, but with opposite signs.
+  + $q$ is sensitive to the difference between the mean gap-fee $g$ and the mean individual bulk-bill incentive $i$ i.e. $q\propto-(g-i)$
+  + As the gap-fee increases $g\to \infty$ then $\displaystyle{\lim_{g\to\infty}q=\frac{-g}{+g}}=-1$.
+  + As the proportion of bulk-billed with pre-existing incentives increases $b\to1$ then $\displaystyle{\lim_{b\to1}q(b) = \frac{x(u-1)}{x+i}}$
+  + As the proportion of bulk-billed with pre-existing incentives falls $b\to0$ then $\displaystyle{\lim_{b\to0}q(b) = \frac{x(u-1)-(g-i)}{x+g}}$
