@@ -599,26 +599,37 @@ server <- function(input, output, session) {
       title_text <- "Benefit-loss according to mean gap fee and proportion concessional bulk-billed"
       z_variable <- as.formula("~benefit")
       zaxis_text <- "Net benefit<br>per service ($)"
-    } else if (input$zaxis_plotly3d == "Revenue change (%)") {
-      # plot change in revenue (%) on z-axis
-      title_text <- "Revenue change according to mean gap fee and proportion concessional bulk-billed"
-      z_variable <- as.formula("~benefit_rel")
-      zaxis_text <- "Revenue change (%)"
-    }
-
-    fig_plotly_3d <- plot_ly(
-      data = benefit_loss(),
-      x = ~gap, y = ~concessional_bulkbilled, z = z_variable,
-      text = ~benefit_rel, customdata = ~current_fee_mean,
-      type = "scatter3d", mode = "markers",
-      hovertemplate = paste(
+      extra_text <- as.formula("~benefit_rel")
+      hover_template <- paste(
         "Mean Gap fee: <b>$%{x}</b><br>",
         "Concessional bulk-billed: <b>%{y}</b>%<br>",
         "Current mean fee: <b>%{customdata:$.2f}</b><br>",
         "Benefit: <b>%{z:$.2f}</b><br>",
         "Revenue change (%): <b>%{text:.1f}</b>%",
         "<extra></extra>"
-      ),
+      )
+    } else if (input$zaxis_plotly3d == "Revenue change (%)") {
+      # plot change in revenue (%) on z-axis
+      title_text <- "Revenue change according to mean gap fee and proportion concessional bulk-billed"
+      z_variable <- as.formula("~benefit_rel")
+      zaxis_text <- "Revenue change (%)"
+      extra_text <- as.formula("~benefit")
+      hover_template <- paste(
+        "Mean Gap fee: <b>$%{x}</b><br>",
+        "Concessional bulk-billed: <b>%{y}</b>%<br>",
+        "Current mean fee: <b>%{customdata:$.2f}</b><br>",
+        "Benefit: <b>%{text:$.2f}</b><br>",
+        "Revenue change (%): <b>%{z:.1f}</b>%",
+        "<extra></extra>"
+      )
+    }
+
+    fig_plotly_3d <- plot_ly(
+      data = benefit_loss(),
+      x = ~gap, y = ~concessional_bulkbilled, z = z_variable,
+      text = extra_text, customdata = ~current_fee_mean,
+      type = "scatter3d", mode = "markers",
+      hovertemplate = hover_template,
       marker = list(
         color = ~benefit,
         colorscale = "Rainbow",
