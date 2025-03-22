@@ -257,7 +257,7 @@ ui <- fluidPage(
               selectInput(
                 inputId = "table_resolution",
                 label = "Resolution of table",
-                choices = c("5", "2.5")
+                choices = c("$5 and 5%" = 5, "$2.5 and 2.5%" = 2.5)
               )
             )
           )
