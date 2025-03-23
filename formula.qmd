@@ -2,21 +2,13 @@
 title: "Universal Bulk Billing mathematics"
 author: "David Fong"
 format: 
-  pdf: default
+  pdf:
+    prefer-html: true
   html: default
-editor: visual
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
 ```{r}
-#| echo: true
+#| echo: !expr knitr::is_html_output()
 #| error: false
 #| warning: false
 #| code-fold: true
@@ -26,6 +18,7 @@ When you click the **Render** button a document will be generated that includes 
 library(tibble)
 library(plotly)
 library(ggplot2)
+library(ggthemes)
 library(dplyr)
 
 fee_names <- c("a", "b", "c", "d", "e")
@@ -187,9 +180,9 @@ net_benefit <- function(
 }
 
 # mean gap fees from $0 to $60
-gap_fee_range <- seq(from = 0, to = 70, by = 1)
+gap_fee_range <- seq(from = 0, to = 70, by = 5)
 # privately billed range from 0 to 100%
-concessional_bulkbilled_range <- seq(from = 0, to = 100, by = 1)
+concessional_bulkbilled_range <- seq(from = 0, to = 100, by = 5)
 
 # this model is based on the first practice model described above
 # together with care plan item numbers
@@ -321,27 +314,16 @@ fig_plotly_3d <- plot_ly(
     # coloraxis = list(colorbar = list(x = 0.6))
     # move the color legend to the left a little
   )
-
-# this plot cannot be shown in the web-browser using this code block!
-# you will need to copy this code (and all the pre-requisites)
-# into a 'R/RStudio' and run it yourself :)
-fig_ggplotly <- ggplot(
-  data = benefit_loss_practice_standard,
-  aes(x = gap, y = concessional_bulkbilled))+
-  geom_point(
-    aes(fill = benefit),
-    size = 4, shape = 22, stroke = 0
-  ) +
-  scale_fill_viridis_c(option = "turbo", direction = -1)
-# to look at this plot, either 'fig_ggplotly' in R/RStudio or
-# 'ggplotly(fig_ggplotly)'
-
-fig_plotly_3d # show the 3D Plotly
 ```
 
-You can add options to executable code like this
-
 ```{r}
+#| echo: !expr knitr::is_html_output()
+#| error: false
+#| warning: false
+#| code-fold: true
+#| code-overflow: wrap
+#| results: asis
+
 new_practice_service_raw_2 <- 
   # A, B, C, D, E service items
   # and GPMP/TCA/reviews (CDM), health assessment and mental health plan items
@@ -357,7 +339,7 @@ benefit_loss <- tibble(
   concessional_bulkbilled = numeric(),
   current_fee_mean = numeric(),
   benefit = numeric(),
-  benefit_rel = character()
+  benefit_rel = numeric()
 )
 
 for (x in gap_fee_range) {
@@ -404,42 +386,49 @@ for (x in gap_fee_range) {
       gap = x, concessional_bulkbilled = y,
       current_fee_mean = current_fee_mean,
       benefit = benefit, 
-      benefit_rel = formatC((benefit / current_fee_mean * 100), digits = 0, format = "f")
+      benefit_rel = benefit / current_fee_mean * 100
     )
   }
 }
 
-# this plot cannot be shown in the web-browser using this code block!
-# you will need to copy this code (and all the pre-requisites)
-# into a 'R/RStudio' and run it yourself :)
+limit <- max(abs(benefit_loss$benefit_rel)) * c(-1, 1)
+
 fig_ggplotly <- ggplot(
-  data = benefit_loss,
+  data = benefit_loss |>
+    dplyr::filter(
+      gap == (gap %/% 5 * 5),
+      concessional_bulkbilled == (concessional_bulkbilled %/% 5 * 5)
+    ),
   aes(
-    x = gap, y = concessional_bulkbilled, 
+    x = gap,
+    y = concessional_bulkbilled,
+    fill = benefit_rel,
     text = sprintf(
       paste(
         "Gap: $%d<br>Concessional bulk-billed: %d%%<br>Current fee mean: $%.2f<br>",
-        "Benefit: $%.2f<br>Revenue change: %s%%", sep = ""
+        "Benefit: $%.2f<br>Revenue change (%%): %.1f%%", sep = ""
       ),
       gap, concessional_bulkbilled, current_fee_mean, benefit, benefit_rel
     )
   )) +
-  geom_point(
-    aes(fill = benefit),
-    size = 4, shape = 22, stroke = 0
-  ) +
+  geom_raster() +
+  geom_text(aes(label=round(benefit_rel, 2)), size = 8/.pt) +
   labs(
     x = "Mean Gap fee ($)",
     y = "Concessional bulk-billed (%)",
-    fill = "Benefit ($)"
+    fill = "Change in revenue (%)"
   ) +
-  scale_fill_viridis_c(option = "turbo", direction = -1)
-# to look at this plot, either 'fig_ggplotly' in R/RStudio or
-# 'ggplotly(fig_ggplotly)'
-
-ggplotly(fig_ggplotly, tooltip = "text") |> # show the ggplotly
-  layout(margin = list(r = 150))
+  scale_x_continuous(breaks = seq(from = 0, to = 70, by = 10)) +
+  scale_y_continuous(breaks = seq(from = 0, to = 100, by = 10)) +
+  ggtitle("Change in revenue (%)") +
+  scale_fill_distiller(
+    type = "div",
+    palette = "Spectral",
+    limit = limit
+  ) +
+  theme_tufte()
 ```
+
 Mean service revenue before adopting universal bulk-billing $r_0$
 
 $$
@@ -478,9 +467,9 @@ i &= \text{ mean individual service bulk-billing incentive}\\
 \end{aligned}
 $$
 
-#### Mean benefit per service ($) of adoping universal bulk-billing
+#### Mean benefit per service of adoping universal bulk-billing
 
-Mean benefit per service of adopting universal bulk-billing $p$
+Mean benefit (\$) per service of adopting universal bulk-billing $p$
 
 $$
 \small
@@ -492,15 +481,15 @@ $$
 
 Implications of equation for $p$ (Equation 3):
 
-* The greater the mean service fee $x$ the greater the mean benefit (per-service) $p$ of adopting universal bulk-billing i.e. $p\propto x$
-  + $x$ may increase if longer consult items ('C' vs 'B') are used, or if higher-rebate items are more frequently used e.g. care plans and health assessment.
-* The greater the mean gap-fee $g$ increases over and above the mean individual service bulk-billing incentive $i$, the less the mean benefit (per-service) $p$ of adopting universal bulk billing i.e. $p\propto-(g-i)$
-  + The mean gap-fee $g$ is less than the 'nominal' gap-fee if the gap-fee is not charged for all relevant services e.g. care-plans, health assessments, reviews.
-  + For example, if a nominal gap-fee of 35 dollars is charged for only 50% of services which don't attract a current bulk-billing incentive, then the mean-gap fee $g$ will be 17.5 dollars.
-  + The mean individual service bulk-billing incentive $i$ can change with service billing patterns, as some services attract a 'single' incentive of `{r} individual_bulkbill_incentive["1", "single"]` or a 'triple' incentive of `{r} individual_bulkbill_incentive["1", "triple"]` (in Monash Area 1).
-    - For example, if a clinic charges more care plans (which attract a single incentive) and less BCDE services (which attract a triple incentive), then $i$ will be reduced.
-    - For the 'average' general practice, according to MBS 2024 figures, $i$ is `{r} sprintf("%.2f" ,sum(individual_bulkbill_incentive["1", new_individual_bulkbill_incentive_by_fee] * new_practice_service_proportions))`. For the practice which does - relatively - more care plans and described as 'practice 2' above, $i$ is `{r} sprintf("%.2f" ,sum(individual_bulkbill_incentive["1", new_individual_bulkbill_incentive_by_fee] * new_practice_service_proportions_2))`. 
-* As pre-existing bulk-billing (with existing bulk-billing incentives) increases $(b \to 1)$, the less influence the difference between mean gap-fee $g$ and mean bulk-billing incentive fee $i$ have over mean benefit per-service $p$ i.e. $\displaystyle{\lim_{b\to1} p(b) = x(u-1)}$. Conversely, as $b \to 0$, the greater the influence of $(g-i)$ on $p$. 
+-   The greater the mean service fee $x$ the greater the mean benefit (per-service) $p$ of adopting universal bulk-billing i.e. $p\propto x$
+    -   $x$ may increase if longer consult items ('C' vs 'B') are used, or if higher-rebate items are more frequently used e.g. care plans and health assessment.
+-   The greater the mean gap-fee $g$ increases over and above the mean individual service bulk-billing incentive $i$, the less the mean benefit (per-service) $p$ of adopting universal bulk billing i.e. $p\propto-(g-i)$
+    -   The mean gap-fee $g$ is less than the 'nominal' gap-fee if the gap-fee is not charged for all relevant services e.g. care-plans, health assessments, reviews.
+    -   For example, if a nominal gap-fee of 35 dollars is charged for only 50% of services which don't attract a current bulk-billing incentive, then the mean-gap fee $g$ will be 17.5 dollars.
+    -   The mean individual service bulk-billing incentive $i$ can change with service billing patterns, as some services attract a 'single' incentive of `{r} individual_bulkbill_incentive["1", "single"]` or a 'triple' incentive of `{r} individual_bulkbill_incentive["1", "triple"]` (in Monash Area 1).
+        -   For example, if a clinic charges more care plans (which attract a single incentive) and less BCDE services (which attract a triple incentive), then $i$ will be reduced.
+        -   For the 'average' general practice, according to MBS 2024 figures, $i$ is `{r} sprintf("%.2f" ,sum(individual_bulkbill_incentive["1", new_individual_bulkbill_incentive_by_fee] * new_practice_service_proportions))`. For the practice which does - relatively - more care plans and described as 'practice 2' above, $i$ is `{r} sprintf("%.2f" ,sum(individual_bulkbill_incentive["1", new_individual_bulkbill_incentive_by_fee] * new_practice_service_proportions_2))`.
+-   As pre-existing bulk-billing (with existing bulk-billing incentives) increases $(b \to 1)$, the less influence the difference between mean gap-fee $g$ and mean bulk-billing incentive fee $i$ have over mean benefit per-service $p$ i.e. $\displaystyle{\lim_{b\to1} p(b) = x(u-1)}$. Conversely, as $b \to 0$, the greater the influence of $(g-i)$ on $p$.
 
 #### Relative benefit of adopting universal bulk-billing
 
@@ -528,9 +517,39 @@ $$
 
 Implications of equation for $q$ (Equation 5)
 
-* As the mean service fee $x$ increases $(x \to \infty)$ then $q \to (u-1)$ i.e. $\displaystyle{\lim_{x \to \infty} q(x) = 0.125}$
-* $q$ is quite sensitive to $(g-i)(1-b)$, which appears in both the numerator and denominator, but with opposite signs.
-  + $q$ is sensitive to the difference between the mean gap-fee $g$ and the mean individual bulk-bill incentive $i$ i.e. $q\propto-(g-i)$
-  + As the gap-fee increases $g\to \infty$ then $\displaystyle{\lim_{g\to\infty}q=\frac{-g}{+g}}=-1$.
-  + As the proportion of bulk-billed with pre-existing incentives increases $b\to1$ then $\displaystyle{\lim_{b\to1}q(b) = \frac{x(u-1)}{x+i}}$
-  + As the proportion of bulk-billed with pre-existing incentives falls $b\to0$ then $\displaystyle{\lim_{b\to0}q(b) = \frac{x(u-1)-(g-i)}{x+g}}$
+-   As the mean service fee $x$ increases $(x \to \infty)$ then $q \to (u-1)$ i.e. $\displaystyle{\lim_{x \to \infty} q(x) = 0.125}$
+-   $q$ is quite sensitive to $(g-i)(1-b)$, which appears in both the numerator and denominator, but with opposite signs.
+    -   $q$ is sensitive to the difference between the mean gap-fee $g$ and the mean individual bulk-bill incentive $i$ i.e. $q\propto-(g-i)$
+    -   As the gap-fee increases $g\to \infty$ then $\displaystyle{\lim_{g\to\infty}q=\frac{-g}{+g}}=-1$.
+    -   As the proportion of bulk-billed with pre-existing incentives increases $b\to1$ then $\displaystyle{\lim_{b\to1}q(b) = \frac{x(u-1)}{x+i}}$
+    -   As the proportion of bulk-billed with pre-existing incentives falls $b\to0$ then $\displaystyle{\lim_{b\to0}q(b) = \frac{x(u-1)-(g-i)}{x+g}}$
+
+### 3D Plot of relative benefit vs mean gap-fee and proportion concessionally bulk-billed
+
+Service item distribution derived from Medicare Benefit Schedule 2024 statistics.
+
+```{r}
+#| echo: !expr knitr::is_html_output()
+#| error: false
+#| warning: false
+#| code-fold: true
+#| code-overflow: wrap
+#| results: asis
+
+fig_plotly_3d # show the 3D Plotly
+```
+
+### Table of relative benefit vs mean gap-fee and proportion concessionally bulk-billed
+
+Service item distribution of a practice which has longer consults, and more care plans, than the 'average' practice.
+
+```{r}
+#| echo: !expr knitr::is_html_output()
+#| error: false
+#| warning: false
+#| code-fold: true
+#| code-overflow: wrap
+#| results: asis
+
+ggplotly(fig_ggplotly, tooltip = "text") # show the ggplotly
+```
