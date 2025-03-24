@@ -508,7 +508,7 @@ The *relative* benefit of adopting universal bulk-billing $q$
 $$
 \small
 \begin{aligned}
-q &= \frac{p}{r_0}\\
+q &= \frac{r_1-r_0}{r_0}\\
 &= \frac{x(u-1) + (i-g)(1-b)}{x + g + b(i-g)} &(4)\\
 &= \frac{x(u-1) - (g-i)(1-b)}{x + (g-i)(1-b) + i} &(5)\\
 \end{aligned}
@@ -595,3 +595,11 @@ ggplotly(fig_ggplotly, tooltip = "text") # show the ggplotly
 fig_ggplotly
 ```
 :::
+
+### Links
+
+{{< iconify fa:github >}} [Github source](https://github.com/DavidPatShuiFong/universalbulkbilling)
+
+{{< iconify file-icons:rstudio >}} [Dashboard (shiny)](https://shiny.davidfong.org/universalbulkbilling/)
+
+{{< iconify iconoir:www >}} [Explanatory notes](https://www.davidfong.org/post/universalbulkbilling-update)

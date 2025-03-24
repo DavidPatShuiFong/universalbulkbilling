@@ -573,7 +573,7 @@ server <- function(input, output, session) {
         )
       )) +
       geom_raster() +
-      geom_text(aes(label=round(benefit_rel, 2)), size = 8/.pt) +
+      geom_text(aes(label=round(benefit_rel, 1)), size = 8/.pt) +
       labs(
         x = "Mean Gap fee ($)",
         y = "Concessional bulk-billed (%)",
