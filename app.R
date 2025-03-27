@@ -56,8 +56,8 @@ individual_bulkbill_incentive <- array(
   dimnames = list(c("1", "2", "3+4", "5", "6", "7"), c("single", "triple"))
 )
 
-# universal bulk billing incentive
-# over the service fee
+# universal bulk billing incentive 'loading payment'
+# over the service fee. paid quarterly
 # set to 12.5%
 universal_bulkbill_incentive <- 0.125
 
@@ -318,6 +318,10 @@ ui <- fluidPage(
           "'bulk-billed with incentive' services or 'other/private' services.", br(),
           "For simplicity, the same number can be used in both 'bulk' and 'private' columns.", br(),
           "From the 'raw' numbers, a proportion is calculated (the calculated columns, 'service_proportion_bulk' and 'service_proportion_private', cannot be directly edited).",
+        ),
+        tabPanel(
+          "Equations",
+          htmlOutput("formulae")
         )
       )
     )
@@ -340,6 +344,14 @@ server <- function(input, output, session) {
   # thereby avoiding the problem of the previous input$xxx still existing
   mbs_table_version <- 1
 
+  addResourcePath("www", getwd())
+  output$formulae <- renderUI({
+    tags$iframe(
+      seamless = "seamless",
+      src = "www/formula.html",
+      style = "width:100%; height:80vh;"
+    )
+  })
 
   # the proportion (0 - 1) of patients who are both bulk-billed
   # AND currently qualify for the bulk-billing incentives

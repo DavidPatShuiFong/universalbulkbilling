@@ -96,7 +96,7 @@ individual_bulkbill_incentive_by_fee <-
 # set the Monash area to the city
 monash_area <- "1"
 
-# universal bulk billing incentive
+# universal bulk billing incentive 'loading' payment, paid quarterly
 # over the service fee
 # set to 12.5%
 universal_bulkbill_incentive <- 0.125
@@ -471,7 +471,7 @@ $$
 $$
 \small
 \begin{aligned}
-\text{where } u &= \text{ rebates plus quarterly bonus} = 1.125\\
+\text{where } u &= \text{ rebates plus quarterly loading payment} = 1.125\\
 x &= \text{ mean service fee}\\
 i &= \text{ mean individual service bulk-billing incentive}\\
 \end{aligned}
@@ -518,7 +518,7 @@ $$
 \small
 \begin{aligned}
 \text{where } x &= \text{mean service fee}\\
-u &= \text{rebates plus quarterly bonus} = 1.125\\
+u &= \text{rebates plus quarterly loading payment} = 1.125\\
 g &= \text{mean gap-fee when patient not bulk-billed with incentive fee}\\
 i &= \text{mean individual service bulk-billing incentive}\\
 b &= \text{proportion of patients bulk-billed concessionally (0-1)}\\
