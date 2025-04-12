@@ -144,6 +144,7 @@ ui <- page_sidebar(
 
   # Application title
   title = "Universal bulk-billing benefit-loss",
+  theme = bs_theme(bootswatch = "journal"),
 
   # Sidebar with a slider input for number of bins
   sidebar = sidebar(
@@ -185,6 +186,17 @@ ui <- page_sidebar(
       em("By default, all calculations ('simple' and the tables and plots) are based on 'average' MBS service item distribution"),
       em("according to MBS statistics, 2024. MBS service item distribution can be changed through"),
       em("the"), actionLink("jump_to_mbs_schedule", em("Medicare Benefits Schedule")), em(" tab.")
+    ),
+    hr(),
+    accordion_panel(
+      "Themer", icon = bsicons::bs_icon("palette"),
+      br(),
+      selectInput(
+        inputId = "theme_choice",
+        label = "Choose a Bootstrap theme:",
+        choices = bootswatch_themes(),
+        selected = "journal" # Default theme
+      )
     ),
     hr(),
     tags$footer(
@@ -251,7 +263,7 @@ ui <- page_sidebar(
       "3D Plot",
       br(),
       card(
-        plotlyOutput("plotly_3d", width = "60vw", height = "70vh"),
+        plotlyOutput("plotly_3d", height = "70vh"),
         min_height = 450,
         br(),
         layout_columns(
@@ -371,6 +383,11 @@ server <- function(input, output, session) {
       style = "width:100%; height:80vh;"
     )
   })
+
+  # change theme according to user choice
+  observe(session$setCurrentTheme(
+    bs_theme(bootswatch = input$theme_choice)
+  ))
 
   # the proportion (0 - 1) of patients who are both bulk-billed
   # AND currently qualify for the bulk-billing incentives
