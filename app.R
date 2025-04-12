@@ -246,7 +246,7 @@ ui <- page_sidebar(
         em("concessional_bulkbilled"), "- proportion (%) of services which are bulk-billed and receive a bulk-bill incentive payment.",
         "This is a proportion of *all* services charged with these service item numbers.",
         "Only services which potentially attract bulk-billing incentives should be included.", br(),
-        em("current_fee_mean"), "- the calculated mean fee for services.", br(),
+        em("current_fee_mean"), "- the calculated current mean fee for services.", br(),
         em("benefit"), "- the mean benefit/cost per service of adopting universal bulk-billing.", br(),
         em("benefit_rel"), "- the calculated change in revenue of adopting universal bulk-billing."
       )
@@ -756,7 +756,7 @@ server <- function(input, output, session) {
 
   output$mean_fee_valuebox <- renderUI({
     bslib::value_box(
-      title = "Calculated mean fee",
+      title = "Calculated current mean fee",
       value = sprintf("$%.2f", mean_fee()),
       showcase = bs_icon("currency-dollar"),
       theme = "purple"
@@ -764,7 +764,7 @@ server <- function(input, output, session) {
   })
   output$mean_fee <- renderText({
     sprintf(
-      # "Calculated Mean fee: $%.2f",
+      "Calculated current Mean fee: $%.2f",
       "$%.2f",
       mean_fee()
     )
