@@ -3,6 +3,8 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 library(shiny)
+library(bslib)
+library(bsicons)
 library(tibble)
 library(plotly)
 library(ggplot2)
@@ -134,196 +136,213 @@ net_benefit <- function(
 
 
 # Define UI for application that draws a histogram
-ui <- fluidPage(
+ui <- page_sidebar(
   # make horizontal rules more visible
   tags$head(
     tags$style(HTML("hr {border-top: 1px solid #000000;}"))
   ),
 
   # Application title
-  titlePanel("Universal bulk-billing benefit-loss"),
+  title = "Universal bulk-billing benefit-loss",
 
   # Sidebar with a slider input for number of bins
-  sidebarLayout(
-    sidebarPanel(
-      width = 3,
-      selectInput(
-        "monash",
-        "Monash area",
-        dimnames(individual_bulkbill_incentive)[[1]]
-      ),
-      hr(),
-      h4(em("Quick calculator")),
-      sliderInput(
-        inputId = "concessional_bulkbilled",
-        label = "Concessional bulk-billed (%)",
-        min = 0,
-        max = 100,
-        value = 50
-      ),
-      em("Proportion of services which are both currently bulk-billed AND receive bulk-bill incentives e.g. have a concession card"),
-      br(), br(),
-      sliderInput(
-        inputId = "all_gapfees",
-        label = "Set mean of ALL gap fees ($)",
-        min = 0,
-        max = 100,
-        value = 50
-      ),
-      checkboxInput(
-        inputId = "all_gapfees_confirm",
-        label = "Enable to set ALL mean gapfees"
-      ),
-      em("The mean gap-fee for all services which were either not bulk-billed or charged without receiving current bulk-bill incentives."),
-      br(), br(),
-      textOutput("mean_fee"),
-      textOutput("simple_benefit"),
-      textOutput("simple_benefit_relative"),
-      br(),
+  sidebar = sidebar(
+    width = "30%",
+    position = "left",
+    selectInput(
+      "monash",
+      "Monash area",
+      dimnames(individual_bulkbill_incentive)[[1]]
+    ),
+    hr(),
+    h4(em("Quick calculator")),
+    sliderInput(
+      inputId = "concessional_bulkbilled",
+      label = "Concessional bulk-billed (%)",
+      min = 0,
+      max = 100,
+      value = 50
+    ),
+    em("Proportion of services which are both currently bulk-billed AND receive bulk-bill incentives e.g. have a concession card"),
+    sliderInput(
+      inputId = "all_gapfees",
+      label = "Set mean of ALL gap fees ($)",
+      min = 0,
+      max = 100,
+      value = 50
+    ),
+    checkboxInput(
+      inputId = "all_gapfees_confirm",
+      label = "Enable to set ALL mean gapfees"
+    ),
+    em("The mean gap-fee for all services which were either not bulk-billed or charged without receiving current bulk-bill incentives."),
+    layout_column_wrap(
+      uiOutput("mean_fee_valuebox"),
+      uiOutput("simple_benefit_valuebox"),
+      uiOutput("simple_benefit_relative_valuebox")
+    ),
+    div(
       em("By default, all calculations ('simple' and the tables and plots) are based on 'average' MBS service item distribution"),
       em("according to MBS statistics, 2024. MBS service item distribution can be changed through"),
-      em("the"), actionLink("jump_to_mbs_schedule", em("Medicare Benefits Schedule")), em(" tab."),
-      hr(),
-      tags$footer(
-        "Dr David Fong", br(),
-        icon("github"),
-        tags$a(
-          "Source code",
-          target = "_blank",
-          href = "https://github.com/DavidPatShuiFong/universalbulkbilling"
-        ), "- review welcome", br(),
-        icon("globe"), "Explanatory notes - ",
-        tags$a(
-          "www.davidfong.org",
-          target = "_blank",
-          href = "http://www.davidfong.org/post/universalbulkbilling-update/"
-        ), br(),
-        "🄯",
-        tags$a(
-          "Mozilla Public License 2.0",
-          target = "_blank",
-          href = "https://www.mozilla.org/en-US/MPL/2.0/"
-        ), br(),
-        "Free for private use, Free for public benefit",
-        style = "width: 100%; color: black; text-align: center;"
+      em("the"), actionLink("jump_to_mbs_schedule", em("Medicare Benefits Schedule")), em(" tab.")
+    ),
+    hr(),
+    tags$footer(
+      "Dr David Fong", br(),
+      icon("github"),
+      tags$a(
+        "Source code",
+        target = "_blank",
+        href = "https://github.com/DavidPatShuiFong/universalbulkbilling"
+      ), "- review welcome", br(),
+      icon("globe"), "Explanatory notes - ",
+      tags$a(
+        "www.davidfong.org",
+        target = "_blank",
+        href = "http://www.davidfong.org/post/universalbulkbilling-update/"
+      ), br(),
+      "🄯",
+      tags$a(
+        "Mozilla Public License 2.0",
+        target = "_blank",
+        href = "https://www.mozilla.org/en-US/MPL/2.0/"
+      ), br(),
+      "Free for private use, Free for public benefit",
+      style = "width: 100%; color: black; text-align: center;"
+    )
+  ),
+  # Show a plot of the generated distribution
+  navset_card_underline(
+    title = "Plots",
+    id = "panels",
+    nav_panel(
+      "Benefit-Loss",
+      card(
+        plotlyOutput("ggplot_benefitloss"),
+        min_height = 450
+      ),
+      div(
+        "Calculated net benefit per service item if proposed universal bulk-billing adopted,",
+        "across a range of pre-existing proportion of patients bulk-billed (with existing bulk-billing incentives)",
+        "and mean gap fees charged for all other services (which would have qualified for bulk-billing incentive if the patient currently has a health care card etc., or will qualify for all patients under the universal bulk-billing proposal).",
+        br(), hr(),
+        downloadButton("download", "Download benefits '.csv' or Excel table"), br(), br(),
+        "Downloaded table format:", br(),
+        em("gap"),"- mean gap fee ($) for services which are billed to a patient without receiving a bulk-billing incentive (e.g. service for an adult without a concession card).",
+        "If these services were 'bulk-billed' to a patient with a concession card, then the service would attract a bulk-billing incentive.",
+        "Note that the 'mean' gap fee for these services includes services which are 'bulk-billed to patient who do not qualify for current bulk-billing incentives.", br(),
+        em("concessional_bulkbilled"), "- proportion (%) of services which are bulk-billed and receive a bulk-bill incentive payment.",
+        "This is a proportion of *all* services charged with these service item numbers.",
+        "Only services which potentially attract bulk-billing incentives should be included.", br(),
+        em("current_fee_mean"), "- the calculated mean fee for services.", br(),
+        em("benefit"), "- the mean benefit/cost per service of adopting universal bulk-billing.", br(),
+        em("benefit_rel"), "- the calculated change in revenue of adopting universal bulk-billing."
       )
     ),
-    # Show a plot of the generated distribution
-    mainPanel(
-      tabsetPanel(
-        id = "panels",
-        tabPanel(
-          "Benefit-Loss",
-          br(), br(),
-          plotlyOutput("ggplot_benefitloss"),
-          br(), br(),
-          "Calculated net benefit per service item if proposed universal bulk-billing adopted,",
-          "across a range of pre-existing proportion of patients bulk-billed (with existing bulk-billing incentives)",
-          "and mean gap fees charged for all other services (which would have qualified for bulk-billing incentive if the patient currently has a health care card etc., or will qualify for all patients under the universal bulk-billing proposal).",
-          br(), hr(),
-          downloadButton("download", "Download benefits '.csv' or Excel table"), br(), br(),
-          "Downloaded table format:", br(),
-          em("gap"),"- mean gap fee ($) for services which are billed to a patient without receiving a bulk-billing incentive (e.g. service for an adult without a concession card).",
-          "If these services were 'bulk-billed' to a patient with a concession card, then the service would attract a bulk-billing incentive.",
-          "Note that the 'mean' gap fee for these services includes services which are 'bulk-billed to patient who do not qualify for current bulk-billing incentives.", br(),
-          em("concessional_bulkbilled"), "- proportion (%) of services which are bulk-billed and receive a bulk-bill incentive payment.",
-          "This is a proportion of *all* services charged with these service item numbers.",
-          "Only services which potentially attract bulk-billing incentives should be included.", br(),
-          em("current_fee_mean"), "- the calculated mean fee for services.", br(),
-          em("benefit"), "- the mean benefit/cost per service of adopting universal bulk-billing.", br(),
-          em("benefit_rel"), "- the calculated change in revenue of adopting universal bulk-billing."
-        ),
-        tabPanel(
-          "Relative benefit",
-          br(), br(),
-          plotlyOutput("ggplot_benefitrelative"),
-        ),
-        tabPanel(
-          "3D Plot",
-          br(), br(),
-          plotlyOutput("plotly_3d", width = "70vw", height = "70vh"),
-          br(),
-          fluidRow(
-            column(
-              width = 4, offset = 2,
-              selectInput(
-                inputId = "zaxis_plotly3d",
-                label = "Z-axis variable",
-                choices = c("Benefit ($)", "Revenue change (%)")
-              )
+    nav_panel(
+      "Relative benefit",
+      br(),
+      card(
+        plotlyOutput("ggplot_benefitrelative"),
+        min_height = 450
+      ),
+    ),
+    nav_panel(
+      "3D Plot",
+      br(),
+      card(
+        plotlyOutput("plotly_3d", width = "60vw", height = "70vh"),
+        min_height = 450,
+        br(),
+        layout_columns(
+          col_width = c(-1, 4, 4, -1),
+          selectInput(
+            inputId = "zaxis_plotly3d",
+            label = "Z-axis variable",
+            choices = c("Benefit ($)", "Revenue change (%)")
             ),
-            column(
-              width = 4,
-              selectInput(
-                inputId = "table_resolution",
-                label = "Resolution of table",
-                choices = c("$5 and 5%" = 5, "$2.5 and 2.5%" = 2.5)
-              )
-            )
+          selectInput(
+            inputId = "table_resolution",
+            label = "Resolution of table",
+            choices = c("$5 and 5%" = 5, "$2.5 and 2.5%" = 2.5),
           )
-        ),
-        tabPanel(
-          "Medicare Benefit Schedule",
-          br(),
-          h3("Medicare Benefit Schedule table"),
-          br(),
-          tags$div(id = "mbs_table_placeholder"),
-          br(), br(),
-          tabsetPanel(
-            tabPanel(
-              "Upload MBS description table",
-              br(),
-              fileInput("upload_mbs", "Choose MBS description table (.csv or Excel)", accept = c(".csv", ".xls", ".xlsx")),
-              "Upload your own Medicare Benefits description table!",
-              "For examples, see ",
-              tags$a(
-                "'.csv' files on", icon("github"), "Github,",
-                target = "_blank",
-                href = "https://github.com/DavidPatShuiFong/universalbulkbilling/"
-              ),
-              "and column description below.", br(),
-              "Must include columns:",
-              em("fee_names, service_fees, service_proportion_raw_bulk, service_proportion_raw_private, gap_fee, individual_bulkbill_incentive_by_fee"), ".",
-            ),
-            tabPanel(
-              "Set fix_gap for all services",
-              checkboxInput(
-                inputId = "fix_all_gap_fees_confirm",
-                label = "Set fix_gap for all services",
-                FALSE
-              ),
-              radioButtons(
-                inputId = "fix_all_gap_fees",
-                label = NULL,
-                inline = TRUE,
-                choiceNames = c("Off", "On"),
-                choiceValues = c(FALSE, TRUE)
-              )
-            )
-          ),
-          h3("Table editing"),
-          "By default, the table includes 'raw' numbers from Medicare Benefits Schedule statistics, 2024.",
-          "*Only* service items to which bulk-billing incentives apply should be included in this table.", br(),
-          "Using 'right-click', MBS service item rows can be added or removed.",
-          br(),
-          h4("Column description"),
-          em("fee_names"), "- Name of MBS service item. *Only* service items to which bulk-billing incentives apply should be included in the table", br(),
-          em("service_fees"), "- Medicare Benefit Schedule rebate, excluding incentives", br(),
-          em("incentive_by_fee"), "- whether single- or triple- bulk-billing incentive applies", br(),
-          em("gap_fee"), "- ", "the mean gap fee charged when the service is not bulk-billed or the service has not received a bulk-bill incentive", br(),
-          em("fix_gap"), "- If ticked, then this service fee is 'fixed' to the 'gap' value when plotting tables and graphs, instead of varying from $0 to $70.",
-          "This might be useful if the clinic doesn't ever charge 'gap' fees for certain items e.g. health assessments.", br(),
-          em("service_proportion_raw_bulk"), "and", em("service_proportion_raw_private"),
-          "- the 'raw' number/proportion which the service item contributes to either",
-          "'bulk-billed with incentive' services or 'other/private' services.", br(),
-          "For simplicity, the same number can be used in both 'bulk' and 'private' columns.", br(),
-          "From the 'raw' numbers, a proportion is calculated (the calculated columns, 'service_proportion_bulk' and 'service_proportion_private', cannot be directly edited).",
-        ),
-        tabPanel(
-          "Equations",
-          htmlOutput("formulae")
         )
       )
+    ),
+    nav_panel(
+      "Medicare Benefit Schedule",
+      h3("Medicare Benefit Schedule table"),
+      tags$div(id = "mbs_table_placeholder"),
+      br(),
+      tabsetPanel(
+        tabPanel(
+          "Upload MBS description table",
+          br(),
+          fileInput(
+            "upload_mbs",
+            "Choose MBS description table (.csv or Excel)",
+            accept = c(".csv", ".xls", ".xlsx"),
+            width = "50%"
+          ),
+          div(
+            "Upload your own Medicare Benefits description table!",
+            "For examples, see ",
+            tags$a(
+              "'.csv' files on", icon("github"), "Github,",
+              target = "_blank",
+              href = "https://github.com/DavidPatShuiFong/universalbulkbilling/"
+            ),
+            "and column description below."
+          ),
+          div(
+            "Must include columns:",
+            em("fee_names, service_fees, service_proportion_raw_bulk, service_proportion_raw_private, gap_fee, individual_bulkbill_incentive_by_fee"), "."
+          ),
+        ),
+        tabPanel(
+          "Set fix_gap for all services",
+          br(),
+          checkboxInput(
+            inputId = "fix_all_gap_fees_confirm",
+            label = "Set fix_gap for all services",
+            FALSE
+          ),
+          radioButtons(
+            inputId = "fix_all_gap_fees",
+            label = NULL,
+            inline = TRUE,
+            choiceNames = c("Off", "On"),
+            choiceValues = c(FALSE, TRUE)
+          ),
+          br(),
+          div("See description of", em("fix_gap"), "under 'Column description' below")
+        )
+      ),
+      hr(),
+      h3("Table editing"),
+      div(
+        "By default, the table includes 'raw' numbers from Medicare Benefits Schedule statistics, 2024.",
+        "*Only* service items to which bulk-billing incentives apply should be included in this table.",
+        "Using 'right-click', MBS service item rows can be added or removed."
+      ),
+      h4("Column description"),
+      div(em("fee_names"), "- Name of MBS service item. *Only* service items to which bulk-billing incentives apply should be included in the table"),
+      div(em("service_fees"), "- Medicare Benefit Schedule rebate, excluding incentives"),
+      div(em("incentive_by_fee"), "- whether single- or triple- bulk-billing incentive applies"),
+      div(em("gap_fee"), "- ", "the mean gap fee charged when the service is not bulk-billed or the service has not received a bulk-bill incentive"),
+      div(em("fix_gap"), "- If ticked, then this service fee is 'fixed' to the 'gap' value when plotting tables and graphs, instead of varying from $0 to $70.",
+      "This might be useful if the clinic doesn't ever charge 'gap' fees for certain items e.g. health assessments."),
+      div(
+        em("service_proportion_raw_bulk"), "and", em("service_proportion_raw_private"),
+        "- the 'raw' number/proportion which the service item contributes to either",
+        "'bulk-billed with incentive' services or 'other/private' services.",
+        "For simplicity, the same number can be used in both 'bulk' and 'private' columns.",
+        "From the 'raw' numbers, a proportion is calculated (the calculated columns, 'service_proportion_bulk' and 'service_proportion_private', cannot be directly edited)."
+      ),
+    ),
+    nav_panel(
+      "Equations",
+      htmlOutput("formulae")
     )
   )
 )
@@ -362,7 +381,7 @@ server <- function(input, output, session) {
     bindEvent(input$concessional_bulkbilled)
 
   observe({
-    updateTabsetPanel(session, "panels", "Medicare Benefit Schedule")
+    nav_select("panels", "Medicare Benefit Schedule")
   }) |>
     bindEvent(input$jump_to_mbs_schedule)
 
@@ -718,16 +737,41 @@ server <- function(input, output, session) {
       concessional_bulkbilled()
     )
 
+  output$mean_fee_valuebox <- renderUI({
+    bslib::value_box(
+      title = "Calculated mean fee",
+      value = sprintf("$%.2f", mean_fee()),
+      showcase = bs_icon("currency-dollar"),
+      theme = "purple"
+    )
+  })
   output$mean_fee <- renderText({
     sprintf(
-      "Calculated Mean fee: $%.2f",
+      # "Calculated Mean fee: $%.2f",
+      "$%.2f",
       mean_fee()
+    )
+  })
+  output$simple_benefit_valuebox <- renderUI({
+    bslib::value_box(
+      title = "Calculated Net Benefit",
+      value = sprintf("$%.2f", simple_benefit()),
+      showcase = bs_icon("graph-up-arrow"),
+      theme = "teal"
     )
   })
   output$simple_benefit <- renderText({
     sprintf(
       "Calculated Net benefit: $%.2f",
       simple_benefit()
+    )
+  })
+  output$simple_benefit_relative_valuebox <- renderUI({
+    bslib::value_box(
+      title = "Revenue change",
+      value = sprintf("%.1f %%", simple_benefit()/mean_fee()*100),
+      showcase = bs_icon("percent"),
+      theme = "pink"
     )
   })
   output$simple_benefit_relative <- renderText({
