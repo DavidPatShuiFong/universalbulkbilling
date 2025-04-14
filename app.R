@@ -230,7 +230,10 @@ ui <- page_sidebar(
     nav_panel(
       "Benefit-Loss",
       card(
-        plotlyOutput("ggplot_benefitloss"),
+        tags$div(
+          style = "min-width: 80ch; width: 100%;",
+          plotlyOutput("ggplot_benefitloss")
+        ),
         min_height = 450
       ),
       div(
@@ -255,7 +258,10 @@ ui <- page_sidebar(
       "Relative benefit",
       br(),
       card(
-        plotlyOutput("ggplot_benefitrelative"),
+        tags$div(
+          style = "min-width: 80ch; width: 100%;",
+          plotlyOutput("ggplot_benefitrelative")
+        ),
         min_height = 450
       ),
     ),
@@ -263,7 +269,10 @@ ui <- page_sidebar(
       "3D Plot",
       br(),
       card(
-        plotlyOutput("plotly_3d", height = "70vh"),
+        tags$div(
+          style = "min-width: 80ch; width: 100%",
+          plotlyOutput("plotly_3d", height = "70vh")
+        ),
         min_height = 450,
         br(),
         layout_columns(
