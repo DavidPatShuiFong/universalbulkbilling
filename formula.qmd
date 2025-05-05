@@ -452,10 +452,10 @@ $$
 $$
 \small
 \begin{aligned}
-\text{where }b &= \text{proportion of patients bulk-billed concessionally (0-1)}\\
+\text{where }b &= \text{proportion of services bulk-billed concessionally (0-1)}\\
 x &= \text{mean service fee}\\
 i &= \text{mean individual service bulk-billing incentive}\\
-g &= \text{mean gap-fee when patient not bulk-billed with incentive fee}\\
+g &= \text{mean gap-fee when service not bulk-billed with incentive fee}\\
 \end{aligned}
 $$
 
@@ -519,9 +519,9 @@ $$
 \begin{aligned}
 \text{where } x &= \text{mean service fee}\\
 u &= \text{rebates plus quarterly loading payment} = 1.125\\
-g &= \text{mean gap-fee when patient not bulk-billed with incentive fee}\\
+g &= \text{mean gap-fee when service not bulk-billed with incentive fee}\\
 i &= \text{mean individual service bulk-billing incentive}\\
-b &= \text{proportion of patients bulk-billed concessionally (0-1)}\\
+b &= \text{proportion of services bulk-billed concessionally (0-1)}\\
 \end{aligned}
 $$
 
