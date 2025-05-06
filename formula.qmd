@@ -510,7 +510,7 @@ $$
 \begin{aligned}
 q &= \frac{r_1-r_0}{r_0}\\
 &= \frac{x(u-1) + (i-g)(1-b)}{x + g + b(i-g)} &(4)\\
-&= \frac{x(u-1) - (g-i)(1-b)}{x + (g-i)(1-b) + i} &(5)\\
+&= \frac{x(u-1) - (g-i)(1-b)}{x + i + (g-i)(1-b)} &(5)\\
 \end{aligned}
 $$
 
