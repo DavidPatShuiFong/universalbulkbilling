@@ -174,7 +174,7 @@ ui <- page_sidebar(
     ),
     checkboxInput(
       inputId = "all_gapfees_confirm",
-      label = "Enable to set ALL mean gapfees"
+      label = "Enable to set ALL mean gap fees (except those services marked 'fix_gap')"
     ),
     em("The mean gap-fee for all services which were either not bulk-billed or charged without receiving current bulk-bill incentives."),
     layout_column_wrap(
@@ -352,7 +352,8 @@ ui <- page_sidebar(
       div(em("incentive_by_fee"), "- whether single- or triple- bulk-billing incentive applies"),
       div(em("gap_fee"), "- ", "the mean gap fee charged when the service is not bulk-billed or the service has not received a bulk-bill incentive"),
       div(em("fix_gap"), "- If ticked, then this service fee is 'fixed' to the 'gap' value when plotting tables and graphs, instead of varying from $0 to $70.",
-      "This might be useful if the clinic doesn't ever charge 'gap' fees for certain items e.g. health assessments."),
+        "Services which are marked as 'fix_gap' are also not altered by the 'set mean of all gap fees' adjustment tool in the 'Quick Calculator'.",
+        "This might be useful if the clinic doesn't ever charge 'gap' fees for certain items e.g. health assessments."),
       div(
         em("service_proportion_raw_bulk"), "and", em("service_proportion_raw_private"),
         "- the 'raw' number/proportion which the service item contributes to either",
@@ -834,9 +835,16 @@ server <- function(input, output, session) {
             service_proportion_private = service_proportion_raw_private/sum(service_proportion_raw_private)
           )
         if (input$all_gapfees_confirm) {
-          # set all gap fees to the same value
+          # set all gap fees to the same value,
+          # but if service item is set to 'fix_gap' then don't adjust gap fee
           DT <- DT |>
-            mutate(gap_fee = input$all_gapfees)
+            mutate(
+              gap_fee = if_else(
+                fix_gap,
+                gap_fee,
+                input$all_gapfees
+              )
+            )
         }
         if (input$fix_all_gap_fees_confirm) {
           # set all
