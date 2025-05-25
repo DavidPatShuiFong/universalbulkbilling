@@ -1,0 +1,104 @@
+---
+title: "CDDM"
+format: html
+editor: visual
+---
+
+```{r}
+#| echo: false
+library(ggplot2)
+library(ggthemes)
+library(dplyr)
+library(tidyr)
+```
+
+```{r}
+expected_revenue <- data.frame(
+  review_plan_ratio = c(128/416, 256/416, 1, 2, 3),
+  mean_fee = c(91.33, 92.02, 92.89, 95.14, 97.39),
+  mean_fee_with_ubb = c(91.33+11.24, 92.02+11.34, 92.89+11.46, 95.14+11.77, 97.39+12.08)
+)
+```
+
+```{r}
+# Reshape data from wide to long format
+revenue_long <- pivot_longer(
+  expected_revenue,
+  cols = c(mean_fee, mean_fee_with_ubb),
+  names_to = "fee_type",
+  values_to = "mean_fee"
+)
+
+# Extract the first x-values of each series
+first_points <- revenue_long %>%
+  group_by(fee_type) %>%
+  slice(1) %>%
+  pull(review_plan_ratio)
+
+# Plot the data
+ggplot(revenue_long, aes(x = review_plan_ratio, y = mean_fee, color = fee_type)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2) +
+  geom_vline(xintercept = first_points, linetype = "dotted", color = "grey40") +
+  annotate(
+    "text",
+    x = first_points,
+    y = min(revenue_long$mean_fee) + 6 ,  # slightly above lowest y-value
+    label = "current plan review:develop ratio",
+    angle = 90,
+    vjust = -0.5,
+    size = 4,
+    color = "grey40"
+  ) +
+  # Add horizontal dashed line at current mean fee 721/723/732 (pre- 967/965)
+  geom_hline(
+    yintercept = 92.29,
+    linetype = "dashed",
+    color = "#1f77b4"
+  ) +
+  # Add label to horizontal line
+  annotate(
+    "text",
+    x = max(revenue_long$review_plan_ratio) * 0.95,
+    y = expected_revenue$mean_fee[1] + 0.5,
+    label = "Current mean fee ($92.29) with 721/723/732 and pre-UBB",
+    hjust = 1,
+    size = 3.2,
+    color = "#1f77b4"
+  ) +
+  # Add horizontal dashed line at current mean fee 721/723/732 (pre- 967/965)
+  geom_hline(
+    yintercept = 103.69,
+    linetype = "dashed",
+    color = "#ff7f0e"
+  ) +
+  # Add label to horizontal line
+  annotate(
+    "text",
+    x = max(revenue_long$review_plan_ratio) * 0.95,
+    y = expected_revenue$mean_fee_with_ubb[1] + 0.5,
+    label = "Expected mean fee ($103.29) with 721/723/732 and post-UBB",
+    hjust = 1,
+    size = 3.2,
+    color = "#ff7f0e"
+  ) +
+  # Custom x-axis to include zero
+  scale_x_continuous(
+    limits = c(0, max(revenue_long$review_plan_ratio) * 1.05),  # add a little padding
+    expand = c(0, 0)
+  ) +
+  # Customize legend labels
+  scale_color_manual(
+    values = c("mean_fee" = "#1f77b4", "mean_fee_with_ubb" = "#ff7f0e"),
+    labels = c("Current Pre-UBB", "With UBB"),
+    name = "Fee Type"
+  ) +
+  labs(
+    title = "Mean Fee vs Plan Review:Develop Ratio",
+    x = "Plan Review:Develop (967:965) Ratio",
+    y = "Mean Fee",
+    color = "Fee Type"
+  ) +
+  theme_economist()
+
+```
