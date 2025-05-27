@@ -77,7 +77,7 @@ ggplot(revenue_long, aes(x = review_plan_ratio, y = mean_fee, color = fee_type))
     "text",
     x = max(revenue_long$review_plan_ratio) * 0.95,
     y = expected_revenue$mean_fee_with_ubb[1] + 0.5,
-    label = "Expected mean fee ($103.29) with 721/723/732 and post-UBB",
+    label = "Hypothetical mean fee ($103.29) with 721/723/732 and post-UBB",
     hjust = 1,
     size = 3.2,
     color = "#ff7f0e"
