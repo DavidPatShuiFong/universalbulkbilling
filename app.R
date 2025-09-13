@@ -11,6 +11,7 @@ library(ggplot2)
 library(ggthemes)
 library(dplyr)
 library(tidyr)
+library(purrr)
 library(rhandsontable)
 library(htmlwidgets)
 library(shinyalert)
@@ -95,12 +96,15 @@ fee_mean <- function(
 }
 
 net_benefit <- function(
-    # calculate the average net benefit revenue
+  # calculate the average net benefit revenue
   # to the practice per patient
 
   # the variable names used in this function
   # are the same as used in previous code chunks
   # but will be 'local' to this function
+
+  # if 'return_ubb_incentive' is TRUE then return the ubb_incentive only
+  # 'return_ubb_incentive' is an optional parameter, default is FALSE
   service_fees,
   fee_names,
   service_proportion_bulk,
@@ -110,7 +114,8 @@ net_benefit <- function(
   individual_bulkbill_incentive,
   individual_bulkbill_incentive_by_fee,
   monash_area,
-  universal_bulkbill_incentive) {
+  universal_bulkbill_incentive,
+  return_ubb_incentive = FALSE) {
   # calculate individual bulk-bill incentive applicable to defined Monash area
   fee_bulkbill_incentive <- individual_bulkbill_incentive[monash_area, individual_bulkbill_incentive_by_fee]
   # re-define dimensions of the 'x' array
@@ -118,22 +123,32 @@ net_benefit <- function(
   # change row name to the fee names
   rownames(fee_bulkbill_incentive) <- fee_names
 
-  # calculate the universal bulk-bill incentive
-  # for patients formerly privately-billed
-  (1 - concessional_bulkbilled) * sum(service_fees * service_proportion_private) *
+  ubb_incentive <-
+    # the universal bulk-bill incentive (which will be paid as a quarterly PIP)
+    # first the UBB applied to patients who are already concessionally bulk-billed
+    # calculate the universal bulk-bill incentive
+    # for patients formerly privately-billed
+    (1 - concessional_bulkbilled) * sum(service_fees * service_proportion_private) *
     universal_bulkbill_incentive +
     # calculate (and add) benefit for patients already concessionally bulk-billed
     concessional_bulkbilled *  sum(service_fees * service_proportion_bulk) *
-    universal_bulkbill_incentive +
+    universal_bulkbill_incentive
 
+  service_bulkbill_benefit <-
     # calculate (and add) the individual service bulk-billing incentive applied
     # to patients formerly privately-billed
     (1 - concessional_bulkbilled) * sum(service_proportion_private * fee_bulkbill_incentive) -
-
     # calculate (and subtract) the loss from not charging a private 'gap' fee
     (1 - concessional_bulkbilled) * sum(service_proportion_private * gap_fee)
-}
 
+  if (return_ubb_incentive) {
+    return (ubb_incentive)
+  } else {
+    # returning both the ubb_incentive and benefit-loss of not charging gap fees
+    # is the default
+    return (ubb_incentive + service_bulkbill_benefit)
+  }
+}
 
 # Define UI for application that draws a histogram
 ui <- page_sidebar(
@@ -180,7 +195,8 @@ ui <- page_sidebar(
     layout_column_wrap(
       uiOutput("mean_fee_valuebox"),
       uiOutput("simple_benefit_valuebox"),
-      uiOutput("simple_benefit_relative_valuebox")
+      uiOutput("simple_benefit_relative_valuebox"),
+      uiOutput("quarterly_ubb_valuebox")
     ),
     div(
       em("By default, all calculations ('simple' and the tables and plots) are based on 'average' MBS service item distribution"),
@@ -250,6 +266,7 @@ ui <- page_sidebar(
         "This is a proportion of *all* services charged with these service item numbers.",
         "Only services which potentially attract bulk-billing incentives should be included.", br(),
         em("current_fee_mean"), "- the calculated current mean fee for services.", br(),
+        em("ubb_incentive"), "- the universal-bulk-bill incentive payment, paid quarterly", br(),
         em("benefit"), "- the mean benefit/cost per service of adopting universal bulk-billing.", br(),
         em("benefit_rel"), "- the calculated change in revenue of adopting universal bulk-billing."
       )
@@ -495,6 +512,7 @@ server <- function(input, output, session) {
       concessional_bulkbilled = numeric(),
       current_fee_mean = numeric(),
       benefit = numeric(),
+      ubb_incentive = numeric(),
       benefit_rel = numeric()
     )
 
@@ -536,6 +554,22 @@ server <- function(input, output, session) {
           input$monash,
           universal_bulkbill_incentive
         )
+        ubb_incentive <- net_benefit(
+          service_fees = plot_service_table()$service_fees,
+          fee_names = plot_service_table()$fee_names,
+          service_proportion_bulk = plot_service_table()$service_proportion_bulk,
+          service_proportion_private = plot_service_table()$service_proportion_private,
+          gap_fee = new_gap_fee,
+          # set concessional bulk-billed proportion to 'x'
+          # divide by 100 to convert from
+          # percentage to proportion
+          concessional_bulkbilled = y/100,
+          individual_bulkbill_incentive,
+          individual_bulkbill_incentive_by_fee = plot_service_table()$incentive_by_fee,
+          input$monash,
+          universal_bulkbill_incentive,
+          return_ubb_incentive = TRUE
+        )
         current_fee_mean <- fee_mean(
           service_fees = plot_service_table()$service_fees,
           fee_names = plot_service_table()$fee_names,
@@ -555,6 +589,7 @@ server <- function(input, output, session) {
           concessional_bulkbilled = y,
           current_fee_mean = current_fee_mean,
           benefit = benefit,
+          ubb_incentive = ubb_incentive,
           benefit_rel = benefit / current_fee_mean * 100
         )
       }
@@ -582,10 +617,11 @@ server <- function(input, output, session) {
         fill = benefit,
         text = sprintf(
           paste(
-            "Gap: $%d<br>Concessional bulk-billed: %d%%<br>Current fee mean: $%.2f<br>",
-            "Benefit: $%.2f<br>Revenue change (%%): %.1f%%", sep = ""
+            "Gap: $%d<br>Concessional bulk-billed: %d%%<br>",
+            "Current fee mean: $%.2f<br>", "Quarterly UBB incentive: $%.2f<br>",
+            "Net Benefit: $%.2f<br>Revenue change (%%): %.1f%%", sep = ""
           ),
-          gap, concessional_bulkbilled, current_fee_mean, benefit, benefit_rel
+          gap, concessional_bulkbilled, current_fee_mean, ubb_incentive, benefit, benefit_rel
         )
       )) +
       geom_raster() +
@@ -624,10 +660,11 @@ server <- function(input, output, session) {
         fill = benefit_rel,
         text = sprintf(
           paste(
-            "Gap: $%d<br>Concessional bulk-billed: %d%%<br>Current fee mean: $%.2f<br>",
-            "Benefit: $%.2f<br>Revenue change (%%): %.1f%%", sep = ""
+            "Gap: $%d<br>Concessional bulk-billed: %d%%<br>",
+            "Current fee mean: $%.2f<br>", "Quarterly UBB incentive: $%.2f<br>",
+            "Net Benefit: $%.2f<br>Revenue change (%%): %.1f%%", sep = ""
           ),
-          gap, concessional_bulkbilled, current_fee_mean, benefit, benefit_rel
+          gap, concessional_bulkbilled, current_fee_mean, ubb_incentive, benefit, benefit_rel
         )
       )) +
       geom_raster() +
@@ -661,8 +698,9 @@ server <- function(input, output, session) {
       hover_template <- paste(
         "Mean Gap fee: <b>$%{x}</b><br>",
         "Concessional bulk-billed: <b>%{y}</b>%<br>",
-        "Current mean fee: <b>%{customdata:$.2f}</b><br>",
-        "Benefit: <b>%{z:$.2f}</b><br>",
+        "Current mean fee: <b>%{customdata.val1:$.2f}</b><br>",
+        "Quarterly UBB incentive: <b>%{customdata.val2:$.2f}</b><br>",
+        "Net Benefit: <b>%{z:$.2f}</b><br>",
         "Revenue change (%): <b>%{text:.1f}</b>%",
         "<extra></extra>"
       )
@@ -675,17 +713,21 @@ server <- function(input, output, session) {
       hover_template <- paste(
         "Mean Gap fee: <b>$%{x}</b><br>",
         "Concessional bulk-billed: <b>%{y}</b>%<br>",
-        "Current mean fee: <b>%{customdata:$.2f}</b><br>",
-        "Benefit: <b>%{text:$.2f}</b><br>",
+        "Current mean fee: <b>%{customdata.val1:$.2f}</b><br>",
+        "Quarterly UBB incentive: <b>%{customdata.val2:$.2f}</b><br>",
+        "Net Benefit: <b>%{text:$.2f}</b><br>",
         "Revenue change (%): <b>%{z:.1f}</b>%",
         "<extra></extra>"
       )
     }
 
+    benefit_loss_new <- benefit_loss() |>
+      mutate(custom_data_list = purrr::map2(current_fee_mean, ubb_incentive, ~list(val1 = .x, val2 = .y)))
+
     fig_plotly_3d <- plot_ly(
-      data = benefit_loss(),
+      data = benefit_loss_new,
       x = ~gap, y = ~concessional_bulkbilled, z = z_variable,
-      text = extra_text, customdata = ~current_fee_mean,
+      text = extra_text, customdata = ~custom_data_list,
       type = "scatter3d", mode = "markers",
       hovertemplate = hover_template,
       marker = list(
@@ -764,6 +806,28 @@ server <- function(input, output, session) {
       concessional_bulkbilled()
     )
 
+  quarterly_ubb = reactive({
+    v <- trimmed_service_table()
+    net_benefit(
+      v$service_fees,
+      v$fee_names,
+      v$service_proportion_bulk,
+      v$service_proportion_private,
+      v$gap_fee,
+      concessional_bulkbilled(),
+      individual_bulkbill_incentive,
+      v$incentive_by_fee,
+      input$monash,
+      universal_bulkbill_incentive,
+      return_ubb_incentive = TRUE
+    )
+  }) |>
+    bindEvent(
+      trimmed_service_table(),
+      input$monash,
+      concessional_bulkbilled()
+    )
+
   output$mean_fee_valuebox <- renderUI({
     bslib::value_box(
       title = "Calculated current mean fee",
@@ -805,6 +869,21 @@ server <- function(input, output, session) {
     sprintf(
       "Revenue change: %.1f %%",
       simple_benefit()/mean_fee()*100
+    )
+  })
+  output$quarterly_ubb_valuebox <- renderUI({
+    bslib::value_box(
+      title = "Quarterly UBB incentive",
+      value = sprintf("$%.2f", quarterly_ubb()),
+      showcase = bs_icon("currency-dollar"),
+      theme = "blue"
+    )
+  })
+  output$quarterly_ubb <- renderText({
+    sprintf(
+      "Quarterly UBB incentive: $%.2f",
+      "$%.2f",
+      quarterly_ubb()
     )
   })
 
