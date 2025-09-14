@@ -875,7 +875,7 @@ server <- function(input, output, session) {
     bslib::value_box(
       title = "Quarterly UBB incentive",
       value = sprintf("$%.2f", quarterly_ubb()),
-      showcase = bs_icon("currency-dollar"),
+      showcase = bs_icon("calendar-month"),
       theme = "blue"
     )
   })
